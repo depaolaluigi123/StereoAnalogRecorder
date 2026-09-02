@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- App-owned themes: not DayNight, not linked to system dark mode -->
+    <style name="Theme.StereoAnalogRecorder" parent="Theme.StereoAnalogRecorder.Dark" />
+
+    <style name="Theme.StereoAnalogRecorder.Light" parent="Theme.Material3.Light.NoActionBar">
+        <item name="bgPrimary">@color/light_bg_primary</item>
+        <item name="bgSecondary">@color/light_bg_secondary</item>
+        <item name="bgSurface">@color/light_bg_surface</item>
+        <item name="textPrimary">@color/light_text_primary</item>
+        <item name="textSecondary">@color/light_text_secondary</item>
+        <item name="accentColor">@color/light_accent</item>
+        <item name="accentSoft">@color/light_accent_soft</item>
+        <item name="gainTrackColor">@color/light_gain_track</item>
+        <item name="gainActiveColor">@color/light_gain_active</item>
+        <item name="gainReduceColor">@color/light_gain_reduce</item>
+        <item name="gainGlowColor">@color/light_gain_glow</item>
+        <item name="dangerColor">@color/light_danger</item>
+        <item name="meterTrackColor">@color/light_meter_track</item>
+        <item name="meterSafeColor">@color/light_meter_safe</item>
+        <item name="meterWarnColor">@color/light_meter_warn</item>
+        <item name="meterPeakColor">@color/light_meter_peak</item>
+        <item name="recordColor">@color/light_record</item>
+        <item name="meterNeedleColor">@color/light_meter_needle</item>
+        <item name="meterScaleColor">@color/light_meter_scale</item>
+        <item name="elapsedIdleColor">@color/light_elapsed_idle</item>
+        <item name="monitorActiveColor">@color/light_monitor_active</item>
+        <item name="monitorInactiveColor">@color/light_monitor_inactive</item>
+        <item name="alsaStatusIdleColor">@color/light_alsa_status_idle</item>
+        <item name="alsaStatusActiveColor">@color/light_alsa_status_active</item>
+        <item name="alsaStatusWarningColor">@color/light_alsa_status_warning</item>
+
+        <item name="colorPrimary">@color/light_accent</item>
+        <item name="colorSecondary">@color/light_gain_active</item>
+        <item name="android:colorBackground">@color/light_bg_primary</item>
+        <item name="colorSurface">@color/light_bg_surface</item>
+        <item name="colorOnPrimary">@color/light_bg_primary</item>
+        <item name="colorOnSurface">@color/light_text_primary</item>
+        <item name="android:statusBarColor">@color/light_status_bar</item>
+        <item name="android:navigationBarColor">@color/light_nav_bar</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/light_bg_primary</item>
+    </style>
+
+    <style name="Theme.StereoAnalogRecorder.Dark" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="bgPrimary">@color/dark_bg_primary</item>
+        <item name="bgSecondary">@color/dark_bg_secondary</item>
+        <item name="bgSurface">@color/dark_bg_surface</item>
+        <item name="textPrimary">@color/dark_text_primary</item>
+        <item name="textSecondary">@color/dark_text_secondary</item>
+        <item name="accentColor">@color/dark_accent</item>
+        <item name="accentSoft">@color/dark_accent_soft</item>
+        <item name="gainTrackColor">@color/dark_gain_track</item>
+        <item name="gainActiveColor">@color/dark_gain_active</item>
+        <item name="gainReduceColor">@color/dark_gain_reduce</item>
+        <item name="gainGlowColor">@color/dark_gain_glow</item>
+        <item name="dangerColor">@color/dark_danger</item>
+        <item name="meterTrackColor">@color/dark_meter_track</item>
+        <item name="meterSafeColor">@color/dark_meter_safe</item>
+        <item name="meterWarnColor">@color/dark_meter_warn</item>
+        <item name="meterPeakColor">@color/dark_meter_peak</item>
+        <item name="recordColor">@color/dark_record</item>
+        <item name="meterNeedleColor">@color/dark_meter_needle</item>
+        <item name="meterScaleColor">@color/dark_meter_scale</item>
+        <item name="elapsedIdleColor">@color/dark_elapsed_idle</item>
+        <item name="monitorActiveColor">@color/dark_monitor_active</item>
+        <item name="monitorInactiveColor">@color/dark_monitor_inactive</item>
+        <item name="alsaStatusIdleColor">@color/dark_alsa_status_idle</item>
+        <item name="alsaStatusActiveColor">@color/dark_alsa_status_active</item>
+        <item name="alsaStatusWarningColor">@color/dark_alsa_status_warning</item>
+
+        <item name="colorPrimary">@color/dark_accent</item>
+        <item name="colorSecondary">@color/dark_gain_active</item>
+        <item name="android:colorBackground">@color/dark_bg_primary</item>
+        <item name="colorSurface">@color/dark_bg_surface</item>
+        <item name="colorOnPrimary">@color/dark_bg_primary</item>
+        <item name="colorOnSurface">@color/dark_text_primary</item>
+        <item name="android:statusBarColor">@color/dark_status_bar</item>
+        <item name="android:navigationBarColor">@color/dark_nav_bar</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowBackground">@color/dark_bg_primary</item>
+    </style>
+</resources>

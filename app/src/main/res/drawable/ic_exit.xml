@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Telaio della porta, spessore uniforme -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M4,2
+            H17
+            C18.1,2 19,2.9 19,4
+            V9
+            H17
+            V4
+            H4
+            V20
+            H17
+            V15
+            H19
+            V20
+            C19,21.1 18.1,22 17,22
+            H4
+            C2.9,22 2,21.1 2,20
+            V4
+            C2,2.9 2.9,2 4,2
+            Z" />
+
+    <!-- Freccia di uscita -->
+    <path
+        android:fillColor="#FFFFFFFF"
+        android:pathData="
+            M13,7
+            L11.6,8.4
+            L14.2,11
+            H6
+            V13
+            H14.2
+            L11.6,15.6
+            L13,17
+            L18,12
+            Z" />
+
+</vector>

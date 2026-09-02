@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <attr name="bgPrimary" format="color" />
+    <attr name="bgSecondary" format="color" />
+    <attr name="bgSurface" format="color" />
+    <attr name="textPrimary" format="color" />
+    <attr name="textSecondary" format="color" />
+    <attr name="accentColor" format="color" />
+    <attr name="accentSoft" format="color" />
+    <attr name="gainTrackColor" format="color" />
+    <attr name="gainActiveColor" format="color" />
+    <attr name="gainReduceColor" format="color" />
+    <attr name="gainGlowColor" format="color" />
+    <attr name="dangerColor" format="color" />
+    <!-- Meter colors -->
+    <attr name="meterTrackColor" format="color" />
+    <attr name="meterSafeColor" format="color" />
+    <attr name="meterWarnColor" format="color" />
+    <attr name="meterPeakColor" format="color" />
+    <attr name="recordColor" format="color" />
+    <attr name="meterNeedleColor" format="color" />
+    <attr name="meterScaleColor" format="color" />
+    <attr name="elapsedIdleColor" format="color" />
+    <attr name="monitorActiveColor" format="color" />
+    <attr name="monitorInactiveColor" format="color" />
+    <attr name="alsaStatusIdleColor" format="color" />
+    <attr name="alsaStatusActiveColor" format="color" />
+    <attr name="alsaStatusWarningColor" format="color" />
+</resources>

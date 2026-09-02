@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Stereo Analog Recorder</string>
+    <string name="tagline">Domina i suoni forti — registrazione pulita</string>
+
+    <!-- Controlli gain -->
+    <string name="gain_label">Guadagno microfono</string>
+    <string name="mic1_label">Mic 1</string>
+    <string name="mic2_label">Mic 2</string>
+    <string name="link_label">Collega</string>
+    <string name="link_hint">Muovi entrambi i gain insieme</string>
+    <string name="gain_value_format">%1$d dB</string>
+    <string name="gain_reduce_hint">Riduci per evitare il clipping a 0 dB</string>
+
+    <!-- Registrazione -->
+    <string name="recording_section">Registrazione</string>
+    <string name="format_label">Formato</string>
+    <string name="format_wav16">WAV 16-bit</string>
+    <string name="format_wav24">WAV 24-bit</string>
+    <string name="format_m4a">M4A (AAC)</string>
+    <string name="format_note">Android non ha un encoder MP3 nativo, quindi l\'opzione compressa è AAC in un contenitore .m4a.</string>
+    <string name="bitrate_label">Bitrate</string>
+    <string name="bitrate_format">%1$d kbps</string>
+    <string name="button_record">Registra</string>
+    <string name="button_stop">Stop</string>
+    <string name="recording_elapsed_default">00:00</string>
+    <string name="peak_mic1">Picco Mic 1</string>
+    <string name="peak_mic2">Picco Mic 2</string>
+    <string name="peak_format">%1$.1f dB</string>
+    <string name="clip_label">CLIP</string>
+    <string name="db_label">dB</string>
+
+    <!-- Stile meter -->
+    <string name="meter_style_label">Stile meter</string>
+    <string name="meter_digital">Digitale (DAW)</string>
+    <string name="meter_analog">Analogico (tape style)</string>
+
+    <!-- Impostazioni -->
+    <string name="settings">Impostazioni</string>
+    <string name="exit">Esci</string>
+    <string name="theme">Tema</string>
+    <string name="theme_light">Chiaro</string>
+    <string name="theme_dark">Scuro</string>
+    <string name="language">Lingua</string>
+    <string name="language_english">English</string>
+    <string name="language_italian">Italiano</string>
+    <string name="scale_label">Scala del guadagno</string>
+    <string name="scale_value_format">Max ±%1$d dB</string>
+    <string name="scale_hint">Escursione massima di boost e attenuazione per ogni mic</string>
+
+    <!-- Controllo -->
+    <string name="control_type_label">Tipo di controllo</string>
+    <string name="control_gain">Guadagno (solo root)</string>
+    <string name="control_level">Livello (volume)</string>
+    <string name="root_status_available">Root: disponibile</string>
+    <string name="root_status_unavailable">Root: non disponibile</string>
+    <string name="root_status_helper_missing">Root: concesso — helper ALSA non pronto</string>
+    <string name="alsa_helper_missing">I permessi di root sono concessi, ma l\'helper ALSA (tinymix) non si è inizializzato. Esegui di nuovo install-android.sh su un dispositivo rootato per riposizionare l\'helper, poi tocca Riprova.</string>
+
+    <!-- Avvertenza -->
+    <string name="warning_title">Clipping e cura dell\'udito</string>
+    <string name="warning_body">Gain positivi elevati possono distorcere e danneggiare l\'udito e il microfono. Con sorgenti forti usa gain negativo per evitare il clipping a 0 dB.</string>
+
+    <!-- Notifica -->
+    <string name="notification_channel_name">Stereo Analog Recorder</string>
+    <string name="notification_channel_desc">Mostra il gain live del microfono e i controlli di registrazione</string>
+    <string name="notification_title">Stereo Analog Recorder</string>
+    <string name="notification_text_idle">Inattivo — pronto per registrare</string>
+    <string name="notification_text_recording">Registrazione · %1$s</string>
+    <string name="notification_mic1">Mic 1: %1$d dB</string>
+    <string name="notification_mic2">Mic 2: %1$d dB</string>
+    <!-- Valore raw del guadagno ALSA (senza unità dB): mostrato nella notifica
+         quando il tipo di controllo è "Gain (root only)", per coerenza con
+         il valore mostrato sullo slider dell'app. -->
+    <string name="notification_mic1_gain">Mic 1: %1$d</string>
+    <string name="notification_mic2_gain">Mic 2: %1$d</string>
+    <string name="notification_link_on">Collegati</string>
+    <string name="notification_mic1_minus">Mic 1 −1 dB</string>
+    <string name="notification_mic1_plus">Mic 1 +1 dB</string>
+    <string name="notification_mic2_minus">Mic 2 −1 dB</string>
+    <string name="notification_mic2_plus">Mic 2 +1 dB</string>
+    <string name="notification_stop">Stop registrazione</string>
+    <string name="notification_rec">Avvia registrazione</string>
+    <string name="notification_display_label">Notifiche</string>
+    <string name="notification_display_hint">Mostra controlli classici nella tendena.</string>
+    <string name="notification_classic_option">Controlli classici (−/+ per mic, rec/stop)</string>
+    <string name="notification_minimal_text">Registrazione in background</string>
+
+    <!-- Stato -->
+    <string name="status_saved">Salvato: %1$s</string>
+    <string name="status_no_mic">Nessun microfono disponibile</string>
+    <string name="status_analog_gain_active">Gain analogico attivo — clipping prevenuto alla sorgente ✓</string>
+    <string name="alsa_status_idle">Gain: solo digitale (no root / ALSA non disponibile)</string>
+    <string name="alsa_status_active">Gain: analogo (ALSA) + digitale — clipping prevenuto alla sorgente ✓</string>
+    <string name="alsa_status_unavailable">Gain: ALSA non disponibile — verificare i permessi root</string>
+
+    <string name="apply">Applica</string>
+    <string name="close">Chiudi</string>
+    <string name="permission_rationale">L\'accesso al microfono è necessario per registrare e misurare i livelli.</string>
+
+    <string name="monitor_section">Ascolto in cuffia</string>
+    <string name="monitor_label">Ascolto diretto</string>
+    <string name="monitor_hint">Ascolta i microfoni tramite cuffie collegate (funziona anche quando non stai registrando).</string>
+    <string name="monitor_start">Avvia</string>
+    <string name="monitor_stop">Ferma</string>
+    <string name="monitor_on">In ascolto</string>
+    <string name="monitor_off">Spento</string>
+    <string name="monitor_no_headphones">Nessuna cuffia rilevata — collega cuffie cablate o Bluetooth per abilitare l\'ascolto.</string>
+    <string name="status_monitor_on">Ascolto diretto attivo</string>
+    <string name="status_monitor_off">Ascolto diretto disattivato</string>
+
+    <!-- Bitrate hint (shown when M4A/AAC format is selected) -->
+    <string name="bitrate_hint">Il bitrate massimo dipende dal tuo telefono. Il valore più alto supportato dal dispositivo è sempre selezionabile.</string>
+
+    <!-- Sample rate -->
+    <string name="sample_rate_label">Frequenza di campionamento</string>
+    <string name="sample_rate_format">%1$d Hz</string>
+    <string name="sample_rate_hint">Sono elencate solo le frequenze che il telefono è in grado di catturare. Abbiamo osservato che a 44100 Hz il peak meter tende a mostrare letture più basse — questo è probabilmente dovuto al resampling HAL, non all\'attenuazione analogica (che è identica a tutti i rate).</string>
+    <string name="root_permission_needed">L\'app necessita dei permessi di root per controllare il guadagno analogico del microfono alla fonte. Concedi i permessi di root se il tuo telefono è rootato.</string>
+    <string name="root_permission_dialog_title">Permessi di root necessari</string>
+    <string name="request_root_action">Richiedi permessi di root</string>
+</resources>

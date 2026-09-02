@@ -1,0 +1,114 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Stereo Analog Recorder</string>
+    <string name="tagline">Tame loud sound — keep it clean</string>
+
+    <string name="gain_label">Microphone gain</string>
+    <string name="mic1_label">Mic 1</string>
+    <string name="mic2_label">Mic 2</string>
+    <string name="link_label">Link</string>
+    <string name="link_hint">Move both gains together</string>
+    <string name="gain_value_format">%1$d dB</string>
+    <string name="gain_reduce_hint">Reduce to avoid clipping at 0 dB</string>
+
+    <string name="recording_section">Recording</string>
+    <string name="format_label">Format</string>
+    <string name="format_wav16">WAV 16-bit</string>
+    <string name="format_wav24">WAV 24-bit</string>
+    <string name="format_m4a">M4A (AAC)</string>
+    <string name="format_note">Android has no native MP3 encoder, so the compressed option is AAC inside an .m4a container.</string>
+    <string name="bitrate_label">Bitrate</string>
+    <string name="bitrate_format">%1$d kbps</string>
+    <string name="button_record">Record</string>
+    <string name="button_stop">Stop</string>
+    <string name="recording_elapsed_default">00:00</string>
+    <string name="peak_mic1">Peak Mic 1</string>
+    <string name="peak_mic2">Peak Mic 2</string>
+    <string name="peak_format">%1$.1f dB</string>
+    <string name="clip_label">CLIP</string>
+    <string name="db_label">dB</string>
+
+    <string name="meter_style_label">Meter style</string>
+    <string name="meter_digital">Digital (DAW)</string>
+    <string name="meter_analog">Analog (tape style)</string>
+
+    <string name="settings">Settings</string>
+    <string name="exit">Exit</string>
+    <string name="theme">Theme</string>
+    <string name="theme_light">Light</string>
+    <string name="theme_dark">Dark</string>
+    <string name="language">Language</string>
+    <string name="language_english">English</string>
+    <string name="language_italian">Italiano</string>
+    <string name="scale_label">Gain scale</string>
+    <string name="scale_value_format">Max ±%1$d dB</string>
+    <string name="scale_hint">Maximum boost and attenuation range for each mic</string>
+
+    <!-- Control type -->
+    <string name="control_type_label">Control type</string>
+    <string name="control_gain">Gain (root only)</string>
+    <string name="control_level">Level (volume)</string>
+    <string name="root_status_available">Root: available</string>
+    <string name="root_status_unavailable">Root: not available</string>
+    <string name="root_status_helper_missing">Root: granted — ALSA helper not ready</string>
+    <string name="alsa_helper_missing">Root permission is granted, but the ALSA helper (tinymix) didn\'t initialize. Re-run install-android.sh on a rooted device to redeploy the helper, then tap Retry.</string>
+
+    <string name="warning_title">Clip, hearing care</string>
+    <string name="warning_body">Large positive gain can distort and damage hearing and the microphone. Use negative gain with loud sources to prevent clipping at 0 dB.</string>
+
+    <string name="notification_channel_name">Stereo Analog Recorder</string>
+    <string name="notification_channel_desc">Shows live mic gain and recording controls</string>
+    <string name="notification_title">Stereo Analog Recorder</string>
+    <string name="notification_text_idle">Idle — ready to record</string>
+    <string name="notification_text_recording">Recording · %1$s</string>
+    <string name="notification_mic1">Mic 1: %1$d dB</string>
+    <string name="notification_mic2">Mic 2: %1$d dB</string>
+    <!-- Raw ALSA gain value (no dB unit): shown in the notification when
+         Control type = "Gain (root only)" so the number matches the slider. -->
+    <string name="notification_mic1_gain">Mic 1: %1$d</string>
+    <string name="notification_mic2_gain">Mic 2: %1$d</string>
+    <string name="notification_link_on">Linked</string>
+    <string name="notification_mic1_minus">Mic 1 −1 dB</string>
+    <string name="notification_mic1_plus">Mic 1 +1 dB</string>
+    <string name="notification_mic2_minus">Mic 2 −1 dB</string>
+    <string name="notification_mic2_plus">Mic 2 +1 dB</string>
+    <string name="notification_stop">Stop recording</string>
+    <string name="notification_rec">Start recording</string>
+    <string name="notification_display_label">Notifications</string>
+    <string name="notification_display_hint">Show classic controls in the shade.</string>
+    <string name="notification_classic_option">Classic controls (−/+ per mic, rec/stop)</string>
+    <string name="notification_minimal_text">Recording in background</string>
+
+    <string name="status_saved">Saved: %1$s</string>
+    <string name="status_no_mic">No microphone available</string>
+    <string name="status_analog_gain_active">Analog gain active — clipping prevented at source ✓</string>
+    <string name="alsa_status_idle">Gain: digital only (no root / ALSA unavailable)</string>
+    <string name="alsa_status_active">Gain: analog (ALSA) + digital — clipping prevented at source ✓</string>
+    <string name="alsa_status_unavailable">Gain: ALSA unavailable — check root permissions</string>
+
+    <string name="apply">Apply</string>
+    <string name="close">Close</string>
+    <string name="permission_rationale">Microphone access is required to record and measure levels.</string>
+
+    <string name="monitor_section">Headphone monitor</string>
+    <string name="monitor_label">Live listen</string>
+    <string name="monitor_hint">Listen to the mics through connected headphones (works even when not recording).</string>
+    <string name="monitor_start">Start</string>
+    <string name="monitor_stop">Stop</string>
+    <string name="monitor_on">Listening</string>
+    <string name="monitor_off">Off</string>
+    <string name="monitor_no_headphones">No headphones detected — plug in wired or Bluetooth headphones to enable live listen.</string>
+    <string name="status_monitor_on">Live listen on</string>
+    <string name="status_monitor_off">Live listen off</string>
+
+    <!-- Bitrate hint (shown when M4A/AAC format is selected) -->
+    <string name="bitrate_hint">The maximum bitrate depends on your device. The highest value supported by your phone is always selectable.</string>
+
+    <!-- Sample rate -->
+    <string name="sample_rate_label">Sample rate</string>
+    <string name="sample_rate_format">%1$d Hz</string>
+    <string name="sample_rate_hint">Only the rates your phone is actually able to capture are listed. We\'ve observed that at 44100 Hz the peak meter tends to show lower readings — this is probably due to HAL resampling, not to the analog attenuation (which is identical at all rates).</string>
+    <string name="root_permission_needed">The app needs root permission to control analog mic gain at the source. Grant root permission if your phone is rooted.</string>
+    <string name="root_permission_dialog_title">Root permission needed</string>
+    <string name="request_root_action">Request root permission</string>
+</resources>

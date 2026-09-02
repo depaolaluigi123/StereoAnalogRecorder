@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Dark theme colors — referenced by Theme.StereoAnalogRecorder.Dark -->
+<resources>
+    <color name="dark_bg_primary">#0B1410</color>
+    <color name="dark_bg_secondary">#15201A</color>
+    <color name="dark_bg_surface">#1C2A23</color>
+    <color name="dark_text_primary">#E8F2EC</color>
+    <color name="dark_text_secondary">#9BB0A4</color>
+    <color name="dark_accent">#2DD4A8</color>
+    <color name="dark_accent_soft">#1A3D32</color>
+    <color name="dark_gain_track">#2A3B32</color>
+    <color name="dark_gain_active">#FF7A18</color>
+    <color name="dark_gain_reduce">#4FC3F7</color>
+    <color name="dark_gain_glow">#55FF7A18</color>
+    <color name="dark_danger">#EF5350</color>
+    <color name="dark_switch_track">#3A4F44</color>
+    <color name="dark_status_bar">#0B1410</color>
+    <color name="dark_nav_bar">#0B1410</color>
+    <!-- Meter -->
+    <color name="dark_meter_track">#26352E</color>
+    <color name="dark_meter_safe">#4CAF50</color>
+    <color name="dark_meter_warn">#FFB300</color>
+    <color name="dark_meter_peak">#EF5350</color>
+    <color name="dark_record">#EF5350</color>
+    <color name="dark_meter_needle">#E8F2EC</color>
+    <color name="dark_meter_scale">#9BB0A4</color>
+    <color name="dark_elapsed_idle">#E8F2EC</color>
+    <color name="dark_monitor_active">#2DD4A8</color>
+    <color name="dark_monitor_inactive">#9BB0A4</color>
+    <!-- ALSA gain status -->
+    <color name="dark_alsa_status_idle">#9BB0A4</color>
+    <color name="dark_alsa_status_active">#2DD4A8</color>
+    <color name="dark_alsa_status_unavailable">#EF5350</color>
+    <color name="dark_alsa_status_warning">#FFB300</color>
+</resources>

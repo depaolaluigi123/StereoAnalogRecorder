@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Light theme colors — referenced by Theme.StereoAnalogRecorder.Light -->
+<resources>
+    <color name="light_bg_primary">#F3F7F4</color>
+    <color name="light_bg_secondary">#E4EDE7</color>
+    <color name="light_bg_surface">#FFFFFF</color>
+    <color name="light_text_primary">#14201A</color>
+    <color name="light_text_secondary">#4A5C52</color>
+    <color name="light_accent">#0F8A6B</color>
+    <color name="light_accent_soft">#D4F0E6</color>
+    <color name="light_gain_track">#C5D4CB</color>
+    <color name="light_gain_active">#E85D04</color>
+    <color name="light_gain_reduce">#1565C0</color>
+    <color name="light_gain_glow">#33E85D04</color>
+    <color name="light_danger">#C62828</color>
+    <color name="light_switch_track">#A8BDB2</color>
+    <color name="light_status_bar">#E4EDE7</color>
+    <color name="light_nav_bar">#F3F7F4</color>
+    <!-- Meter -->
+    <color name="light_meter_track">#D8E2DB</color>
+    <color name="light_meter_safe">#2E7D32</color>
+    <color name="light_meter_warn">#F9A825</color>
+    <color name="light_meter_peak">#C62828</color>
+    <color name="light_record">#C62828</color>
+    <color name="light_meter_needle">#14201A</color>
+    <color name="light_meter_scale">#4A5C52</color>
+    <color name="light_elapsed_idle">#14201A</color>
+    <color name="light_monitor_active">#0F8A6B</color>
+    <color name="light_monitor_inactive">#7A8C82</color>
+    <!-- ALSA gain status -->
+    <color name="light_alsa_status_idle">#7A8C82</color>
+    <color name="light_alsa_status_active">#0F8A6B</color>
+    <color name="light_alsa_status_unavailable">#C62828</color>
+    <color name="light_alsa_status_warning">#F9A825</color>
+</resources>
