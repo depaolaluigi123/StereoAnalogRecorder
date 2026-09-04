@@ -1,9 +1,12 @@
 package com.stereoanalogrecorder.app.audio
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import java.io.File
+import java.io.IOException
 import java.util.concurrent.locks.ReentrantLock
+import kotlin.math.roundToInt
 
 /**
  * Real analog microphone-gain controller via the ALSA mixer (tinyalsa).
@@ -23,11 +26,11 @@ import java.util.concurrent.locks.ReentrantLock
  *    The actual value writes are performed by a `tinymix` helper binary launched
  *    under `su`.
  *  - A `tinymix` binary for the correct CPU architecture (ARM64, ARM32, x86_64, x86).
- *    This binary is NOT bundled in the APK. It must be deployed to the device using
- *    the `install-android.sh` script, which cross-compiles it from the tinyalsa source
- *    in `dependencies/src/tinyalsa/` or uses a pre-built binary from `dependencies/tinymix/`.
- *    The script places tinymix into the app's private files directory at
- *    `<app-data>/files/tinymix` on first launch.
+ *    The binary **is** bundled in the APK as a per-ABI asset under
+ *    `assets/tinymix/<android-abi>/tinymix`. On first launch the controller
+ *    extracts the variant matching the device's primary ABI into the app's
+ *    private files directory at `<filesDir>/tinymix` (the assets path itself
+ *    is read-only). Subsequent launches reuse the extracted copy.
  *
  * ## Fallback
  *  If root is unavailable, the helper isn't runnable, or the expected ADC
@@ -80,10 +83,18 @@ class AlsaGainController private constructor(private val appContext: Context) {
         val currentValue: Int?
     )
 
-    var status: Status = Status.NO_ROOT
+    // @Volatile: the capture loop reads this on every iteration (see
+    // MicCapture.captureLoop → analogAvailable) without acquiring [lock], and
+    // the MainActivity thread also reads it for the GAIN/LEVEL toggle without
+    // acquiring the lock. Both readers must observe the latest write done
+    // inside initialize()'s synchronized block; without @Volatile the capture
+    // thread can keep seeing Status.NO_ROOT (the initial value) for a short
+    // window after the probe succeeded — leaving the UI showing
+    // "Gain (root only)" while the capture silently falls back to Level.
+    @Volatile var status: Status = Status.NO_ROOT
         private set
 
-    
+
     // Quick-reference for the two readiness predicates:
     //   isRootAvailable     --> su (root) OK
     //   isAnalogGainReady   --> su (root) + tinymix + ADC controls --> all OK
@@ -93,18 +104,24 @@ class AlsaGainController private constructor(private val appContext: Context) {
 
     /** True when root is present (any status except NO_ROOT). */
     val isRootAvailable: Boolean get() = status != Status.NO_ROOT  // su (root) OK
-    
+
 
     /**
      * True when the su binary was *found* on disk (the device is rooted), even if
      * the app hasn't been granted permission to use it yet. Used by the UI to
      * decide whether to prompt the user to grant root access.
      */
-    var suBinaryDetected: Boolean = false
+    @Volatile var suBinaryDetected: Boolean = false
         private set
 
-    /** True once [initialize] has been attempted — prevents re-probing across activity recreation. */
-    private var initialized = false
+    /** True once [initialize] has been attempted — prevents re-probing across activity recreation.
+     *
+     *  @Volatile: read by the main thread from MainActivity.onCreate
+     *  (alsaController!!.isInitialized) without holding [lock]. Without the
+     *  volatile barrier the activity could take the "re-probe" branch even
+     *  though SplashActivity had already finished the probe, racing with the
+     *  UI bindState and again desynchronising UI ↔ capture mode. */
+    @Volatile private var initialized = false
 
     /** True once [initialize] has been attempted (any result, not just READY). */
     val isInitialized: Boolean get() = initialized
@@ -120,18 +137,34 @@ class AlsaGainController private constructor(private val appContext: Context) {
 
     private val lock = ReentrantLock()
 
-    /** Resolved controls by channel index (1-based to match the UI's Mic1/Mic2). */
-    private var mic1Ctl: AdcControl? = null
-    private var mic2Ctl: AdcControl? = null
+    /** Resolved controls by channel index (1-based to match the UI's Mic1/Mic2).
+     *
+     *  @Volatile: read by the capture thread from [setAnalogGainDb] and
+     *  [maxAttenuationDb] *before* entering the synchronized block, and read
+     *  by the MainActivity thread from [mic1ControlRange] for the slider
+     *  bounds — all without holding [lock]. Volatile guarantees the
+     *  references written under the lock in [initialize] are visible to
+     *  those readers without an explicit happens-before edge. */
+    @Volatile private var mic1Ctl: AdcControl? = null
+    @Volatile private var mic2Ctl: AdcControl? = null
 
-    /** Path to the installed tinymix helper, or null if not installable. */
-    private var helperPath: String? = null
+    /** Path to the installed tinymix helper, or null if not installable.
+     *
+     *  @Volatile: read by the capture thread (transitively, via the
+     *  tinymix write path) without holding [lock]. */
+    @Volatile private var helperPath: String? = null
 
-    /** Nominal (manufacturer-default) ADC value, used when restoring on release. */
-    private var defaultVal: Int = DEFAULT_ADC_VAL
+    /** Nominal (manufacturer-default) ADC value, used when restoring on release.
+     *
+     *  @Volatile: read by the capture thread in [setAnalogGainDb] and
+     *  [maxAttenuationDb] before acquiring [lock]. */
+    @Volatile private var defaultVal: Int = DEFAULT_ADC_VAL
 
-    /** Per-step dB scale probed from the codec. LSB ≈ 1.5 dB on WCD937x. */
-    private var stepDb: Float = DEFAULT_STEP_DB
+    /** Per-step dB scale probed from the codec. LSB ≈ 1.5 dB on WCD937x.
+     *
+     *  @Volatile: read by the capture thread in [setAnalogGainDb] and
+     *  [maxAttenuationDb] before acquiring [lock]. */
+    @Volatile private var stepDb: Float = DEFAULT_STEP_DB
 
     /**
      * Auto-detect a working `su` chain. Returns the su invocation prefix
@@ -185,35 +218,108 @@ class AlsaGainController private constructor(private val appContext: Context) {
     }
 
     /**
-     * Locate the tinymix helper binary on this device.
+     * Locate (or deploy) the tinymix helper binary on this device.
      *
-     * The binary is deployed by the `install-android.sh` script, which
-     * cross-compiles tinyalsa for the connected device's architecture
-     * (see `dependencies/src/tinyalsa/` in the project source) and places
-     * the resulting binary into the app's private files directory at
-     * `<app-data>/files/tinymix`. The script also runs `restorecon` on the
-     * destination (so SELinux labels it as `app_data_file` and the
-     * untrusted_app domain can exec it) and removes the staging copy at
-     * `/data/local/tmp/tinymix` after a successful copy.
+     * The binary is **bundled in the APK** as a per-ABI asset under
+     * `assets/tinymix/<android-abi>/tinymix` (e.g. `arm64-v8a/tinymix`,
+     * `armeabi-v7a/tinymix`, `x86_64/tinymix`, `x86/tinymix`). The dev
+     * build script `install-android-with-build-alsa-driver.sh` cross-compiles
+     * `tinymix` from `dependencies/src/tinyalsa-master.zip` for all four
+     * ABIs and writes each binary straight into its assets subdirectory
+     * before Gradle packages the APK, so the resulting app is self-contained.
      *
-     * **Single-source**: only `filesDir/tinymix` is consulted. There is no
-     * fallback to the staging location — that path was removed because the
-     * script now guarantees the private copy on rooted devices, and a
-     * staging-only copy is unusable (SELinux blocks exec from
-     * `/data/local/tmp`). If the private copy is missing, tinymix is
-     * unavailable until `install-android.sh` is re-run on a rooted device.
+     * On first launch we extract the variant matching the device's primary
+     * ABI (`Build.SUPPORTED_ABIS[0]`, the same source the package manager
+     * uses for native lib selection) into the app's private files
+     * directory at `<filesDir>/tinymix`. The app-private dir carries the
+     * `app_data_file` SELinux label, so the `untrusted_app` domain can
+     * execute the file without any `restorecon` dance. Subsequent
+     * launches reuse the extracted copy; if the file already exists and
+     * is executable we don't touch it (a developer can `adb push` a
+     * different binary for testing without it being overwritten).
      *
-     * Returns the absolute path if found and executable, or null otherwise.
+     * Returns the absolute path if a usable tinymix is present after this
+     * call, or null otherwise. A null return drives [status] to
+     * [Status.HELPER_FAILED], which the UI surfaces as the "ALSA helper
+     * missing" state.
      */
     private fun installHelper(): String? {
-        val appPrivate = File(appContext.filesDir, "tinymix")
-        if (appPrivate.isFile && appPrivate.length() > 0L && appPrivate.canExecute()) {
-            Log.d(TAG, "installHelper: found tinymix at ${appPrivate.absolutePath}")
-            return appPrivate.absolutePath
+        val dest = File(appContext.filesDir, "tinymix")
+        // 1) Already extracted (prior launch, or dev override via adb push).
+        if (dest.isFile && dest.length() > 0L && dest.canExecute()) {
+            Log.d(TAG, "installHelper: reusing existing tinymix at ${dest.absolutePath}")
+            return dest.absolutePath
         }
-        Log.w(TAG, "installHelper: tinymix not found at ${appPrivate.absolutePath}. " +
-            "Run install-android.sh on a rooted device to deploy it.")
+        // 2) First launch: pull the ABI-correct binary out of the APK assets.
+        if (extractFromAssets(dest)) {
+            return dest.absolutePath
+        }
+        // 3) Nothing worked — no bundled binary for the device ABI. This
+        // only happens if the APK was built without going through
+        // install-android-with-build-alsa-driver.sh (which always populates
+        // assets/tinymix/<abi>/ for all four ABIs), or if the device ABI
+        // is one we don't ship a binary for.
+        Log.w(TAG, "installHelper: tinymix unavailable at ${dest.absolutePath}. " +
+            "The APK should bundle a tinymix under assets/tinymix/<abi>/; " +
+            "rebuild via install-android-with-build-alsa-driver.sh to regenerate it.")
         return null
+    }
+
+    /**
+     * Copy the tinymix binary matching [Build]'s primary ABI out of the
+     * APK assets bundle into [dest] and mark it executable.
+     *
+     * Asset layout uses Android's canonical ABI directory names so the
+     * mapping is one-to-one and matches what the package manager would
+     * pick for a native library:
+     *   assets/tinymix/arm64-v8a/tinymix
+     *   assets/tinymix/armeabi-v7a/tinymix
+     *   assets/tinymix/x86_64/tinymix
+     *   assets/tinymix/x86/tinymix
+     *
+     * Returns true on success. On any failure the partial file (if any)
+     * is removed so we don't leave a zero-byte placeholder that would
+     * silently break the next probe.
+     */
+    private fun extractFromAssets(dest: File): Boolean {
+        val abi = Build.SUPPORTED_ABIS.firstOrNull() ?: run {
+            Log.w(TAG, "extractFromAssets: Build.SUPPORTED_ABIS is empty")
+            return false
+        }
+        Log.d(TAG, "extractFromAssets: device primary ABI = $abi")
+
+        val assetPath = when (abi) {
+            "arm64-v8a"   -> "tinymix/arm64-v8a/tinymix"
+            "armeabi-v7a" -> "tinymix/armeabi-v7a/tinymix"
+            "x86_64"      -> "tinymix/x86_64/tinymix"
+            "x86"         -> "tinymix/x86/tinymix"
+            else -> {
+                Log.w(TAG, "extractFromAssets: unsupported ABI '$abi' — no bundled tinymix")
+                return false
+            }
+        }
+
+        return try {
+            appContext.assets.open(assetPath).use { input ->
+                dest.outputStream().use { output -> input.copyTo(output) }
+            }
+            // Owner's execute bit is enough: the file lives in the app's
+            // private dir, no other UID can read it anyway.
+            dest.setExecutable(true, false)
+            dest.setReadable(true, false)
+            val execBit = if (dest.canExecute()) "exec" else "NOT-exec"
+            Log.i(TAG, "extractFromAssets: copied $assetPath → ${dest.absolutePath} " +
+                "(${dest.length()} bytes, mode=$execBit)")
+            true
+        } catch (e: IOException) {
+            Log.w(TAG, "extractFromAssets: $assetPath not present in APK assets", e)
+            dest.delete()
+            false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "extractFromAssets: cannot write to ${dest.absolutePath}", e)
+            dest.delete()
+            false
+        }
     }
 
     /**
@@ -253,7 +359,11 @@ class AlsaGainController private constructor(private val appContext: Context) {
         }
     }
 
-    private var suPrefix: String? = null
+    /** The su invocation prefix ("su -c" or "" if already uid 0) — null until
+     *  [detectSuPrefix] confirms one. Set inside [initialize]'s lock; read by
+     *  the capture thread (transitively, via tinymix) without holding the
+     *  lock, hence @Volatile. */
+    @Volatile private var suPrefix: String? = null
 
     /** Parse `tinymix contents` line: `2141\tINT\t1\tADC1 Volume\t012 (range 0->20)` */
     private fun parseContentsLine(line: String): AdcControl? {
@@ -425,7 +535,18 @@ class AlsaGainController private constructor(private val appContext: Context) {
         synchronized(lock) {
             // Convert "user dB relative to default boot gain" → raw ALSA value.
             // User db < 0 means attenuate below default; the codec value goes DOWN.
-            val stepCount = (db / stepDb).toInt()
+            //
+            // ROUND-TO-NEAREST, NOT TRUNCATE: the codec's step is fractional
+            // (1.5 dB on WCD937x) but the store's dB is integer. Truncating
+            // toward zero makes every odd integer dB land on the WRONG raw
+            // step — e.g. dB=1.0 → stepCount=0 → raw=12 → codec stays at the
+            // default while the user thinks they nudged +1.5 dB; and
+            // dB=1.0 displayed via dbToRaw() rounds back to raw=12 too, so
+            // the notification "didn't go" even though the store moved.
+            // Round-to-nearest keeps dB→raw→dB round-trip lossless at the
+            // 0.5-dB boundary and makes the ±1 notification buttons step
+            // the codec by exactly one raw each press.
+            val stepCount = (db / stepDb).roundToInt()
             val targetRaw = (defaultVal + stepCount).coerceIn(ctl.min, ctl.max)
             if (!writeControl(ctl, targetRaw)) return 0f
             // Report the dB actually achieved, relative to the boot default.

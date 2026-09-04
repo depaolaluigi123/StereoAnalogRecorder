@@ -40,6 +40,7 @@ import com.stereoanalogrecorder.app.settings.RecordFormat
 import com.stereoanalogrecorder.app.settings.ThemeManager
 import com.stereoanalogrecorder.app.settings.ThemeMode
 import com.stereoanalogrecorder.app.state.MicStateStore
+import kotlin.math.roundToInt
 
 class MainActivity : AppCompatActivity() {
 
@@ -67,6 +68,41 @@ class MainActivity : AppCompatActivity() {
      *  is unavailable). Mirrors the monitorUiBound guard pattern. */
     private var bindingStateInProgress = false
     private var lastIsRecording = false
+
+    /**
+     * True while the user is actively dragging the mic1 / mic2 gain slider.
+     *
+     * When the user drags the slider slowly, the underlying `addOnChangeListener`
+     * fires on every intermediate finger position. Each fire currently pushes a
+     * new dB value into [MicStateStore], which (a) triggers a forked
+     * `su -c tinymix` write from the capture loop and (b) refreshes the foreground
+     * notification. Two issues with that:
+     *
+     *  1. The ALSA write inside [AlsaGainController.setAnalogGainDb] quantises
+     *     the requested dB to the codec's raw step grid with `(db / stepDb).toInt()`,
+     *     which truncates *toward zero*. For negative dB (attenuation) that means
+     *     the codec lands on a *less* attenuated step than the user asked for
+     *     (e.g. on WCD937x with stepDb=1.5: requesting -10 dB writes raw step
+     *     -6, i.e. -9 dB applied). The meters therefore show a level that doesn't
+     *     match the spinner the user just moved through, and the notification
+     *     displays the truncated codec value, not the spinner value the user
+     *     is still holding.
+     *  2. One `su -c tinymix` fork per finger movement thrashes Magisk's su
+     *     and the kernel mixer when the user dials slowly.
+     *
+     * To fix both, the change listener only updates the on-screen value label
+     * while a drag is in progress and defers the actual store / codec /
+     * notification update to `onStopTrackingTouch`. One write per gesture
+     * instead of one per finger movement, and that single write is applied
+     * to the value the user *released* on — which is the value the slider
+     * thumb, the value label, and the notification all show in sync.
+     *
+     * [bindStateInternal] also respects these flags so an external store
+     * change (e.g. notification button, recording state) can't yank the
+     * slider out from under the user's finger mid-drag.
+     */
+    private var isDraggingMic1 = false
+    private var isDraggingMic2 = false
 
     private val savedReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -355,9 +391,21 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun bindUi() {
-        // Mic 1 gain slider — behavior depends on control mode.
+        // Mic 1 gain slider — see [isDraggingMic1] for why the store update
+        // is deferred to `onStopTrackingTouch` instead of being pushed on
+        // every intermediate finger position.
         binding.mic1Slider.addOnChangeListener { _: Slider, value: Float, fromUser: Boolean ->
             if (!fromUser) return@addOnChangeListener
+            if (isDraggingMic1) {
+                // Mid-drag: only refresh the value label so the user sees
+                // their finger position. The store / codec / notification
+                // are committed once, on touch end, via the touch listener
+                // below — pushing them here would fork one `su -c tinymix`
+                // per finger movement and let the codec's truncate-toward-zero
+                // quantisation leave the meters out of sync with the spinner.
+                updateMicValueLabel(mic = 1, sliderValue = value.toInt(), state = stateStore.snapshot())
+                return@addOnChangeListener
+            }
             val state = stateStore.snapshot()
             if (state.gainControlMode == GainControlMode.ANALOG_GAIN) {
                 // GAIN mode: slider shows raw ALSA value; convert to dB equivalent.
@@ -368,9 +416,34 @@ class MainActivity : AppCompatActivity() {
                 stateStore.setGainMic1(value.toInt())
             }
         }
-        // Mic 2 gain slider — behavior depends on control mode.
+        binding.mic1Slider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: Slider) {
+                isDraggingMic1 = true
+            }
+            override fun onStopTrackingTouch(slider: Slider) {
+                isDraggingMic1 = false
+                // Commit the final value the user released on. The store
+                // observer fans this out to the capture loop (which writes
+                // the analog gain to tinymix) and to [LiveCaptureService]
+                // (which refreshes the foreground notification) — both
+                // end up in sync with the slider thumb the user is still
+                // looking at, instead of a mid-drag intermediate step.
+                val state = stateStore.snapshot()
+                if (state.gainControlMode == GainControlMode.ANALOG_GAIN) {
+                    val db = rawToDb(slider.value.toInt(), alsaController)
+                    stateStore.setGainMic1(db)
+                } else {
+                    stateStore.setGainMic1(slider.value.toInt())
+                }
+            }
+        })
+        // Mic 2 gain slider — same pattern, see [isDraggingMic2].
         binding.mic2Slider.addOnChangeListener { _: Slider, value: Float, fromUser: Boolean ->
             if (!fromUser) return@addOnChangeListener
+            if (isDraggingMic2) {
+                updateMicValueLabel(mic = 2, sliderValue = value.toInt(), state = stateStore.snapshot())
+                return@addOnChangeListener
+            }
             val state = stateStore.snapshot()
             if (state.gainControlMode == GainControlMode.ANALOG_GAIN) {
                 val db = rawToDb(value.toInt(), alsaController)
@@ -379,6 +452,21 @@ class MainActivity : AppCompatActivity() {
                 stateStore.setGainMic2(value.toInt())
             }
         }
+        binding.mic2Slider.addOnSliderTouchListener(object : Slider.OnSliderTouchListener {
+            override fun onStartTrackingTouch(slider: Slider) {
+                isDraggingMic2 = true
+            }
+            override fun onStopTrackingTouch(slider: Slider) {
+                isDraggingMic2 = false
+                val state = stateStore.snapshot()
+                if (state.gainControlMode == GainControlMode.ANALOG_GAIN) {
+                    val db = rawToDb(slider.value.toInt(), alsaController)
+                    stateStore.setGainMic2(db)
+                } else {
+                    stateStore.setGainMic2(slider.value.toInt())
+                }
+            }
+        })
         // Link switch — guarded against re-entrancy from bindState(), same pattern
         // as controlTypeToggle above. Without the bindingStateInProgress guard,
         // programmatic setChecked calls during bindState can fire the listener
@@ -608,25 +696,43 @@ class MainActivity : AppCompatActivity() {
             val cr = controlRange
             // Set value BEFORE changing bounds so the Slider doesn't throw
             // when the current dB value falls outside the new raw ALSA range.
-            val currentRaw1 = dbToRaw(state.gainMic1Db, alsaController)
-            val currentRaw2 = dbToRaw(state.gainMic2Db, alsaController)
-            binding.mic1Slider.value = currentRaw1.toFloat()
-            binding.mic2Slider.value = currentRaw2.toFloat()
-            // Now update bounds (value is already within new range).
+            // Skip while the user is actively dragging: the slider thumb
+            // belongs to them, and the value label is updated by the change
+            // listener (see bindUi). A drag-scoped bindState call would
+            // otherwise yank the thumb back to the store's pre-drag value.
+            if (!isDraggingMic1) {
+                val currentRaw1 = dbToRaw(state.gainMic1Db, alsaController)
+                binding.mic1Slider.value = currentRaw1.toFloat()
+                // Show raw value label (stepSize=1 so values are integers).
+                binding.mic1Value.text = currentRaw1.toString()
+            }
+            if (!isDraggingMic2) {
+                val currentRaw2 = dbToRaw(state.gainMic2Db, alsaController)
+                binding.mic2Slider.value = currentRaw2.toFloat()
+                binding.mic2Value.text = currentRaw2.toString()
+            }
+            // Now update bounds (value is already within new range). Bounds
+            // are safe to update even mid-drag because they only change when
+            // the effective control mode changes, and the mode toggle is
+            // user-initiated and would interrupt the drag anyway.
             binding.mic1Slider.valueFrom = cr.min.toFloat()
             binding.mic1Slider.valueTo = cr.max.toFloat()
             binding.mic2Slider.valueFrom = cr.min.toFloat()
             binding.mic2Slider.valueTo = cr.max.toFloat()
-            // Show raw value label (stepSize=1 so values are integers).
-            binding.mic1Value.text = currentRaw1.toString()
-            binding.mic2Value.text = currentRaw2.toString()
         } else {
             // ---- LEVEL mode: slider uses dB values (existing behavior) ----
             // Set dB value BEFORE updating bounds (dB may fall outside the raw ALSA range currently set).
-            val db1 = state.gainMic1Db.coerceIn(-state.maxGainScale, state.maxGainScale)
-            val db2 = state.gainMic2Db.coerceIn(-state.maxGainScale, state.maxGainScale)
-            binding.mic1Slider.value = db1.toFloat()
-            binding.mic2Slider.value = db2.toFloat()
+            if (!isDraggingMic1) {
+                val db1 = state.gainMic1Db.coerceIn(-state.maxGainScale, state.maxGainScale)
+                binding.mic1Slider.value = db1.toFloat()
+                // Show dB value label.
+                binding.mic1Value.text = formatGain(db1)
+            }
+            if (!isDraggingMic2) {
+                val db2 = state.gainMic2Db.coerceIn(-state.maxGainScale, state.maxGainScale)
+                binding.mic2Slider.value = db2.toFloat()
+                binding.mic2Value.text = formatGain(db2)
+            }
             // Now update bounds.
             val newFrom = (-scale).toFloat()
             val newTo = scale
@@ -634,9 +740,6 @@ class MainActivity : AppCompatActivity() {
             binding.mic1Slider.valueTo = newTo
             binding.mic2Slider.valueFrom = newFrom
             binding.mic2Slider.valueTo = newTo
-            // Show dB value label.
-            binding.mic1Value.text = formatGain(db1)
-            binding.mic2Value.text = formatGain(db2)
         }
 
         // Value text color: reduce (blue) vs boost (orange).
@@ -874,16 +977,47 @@ class MainActivity : AppCompatActivity() {
     private fun formatGain(db: Int): String =
         if (db > 0) "+$db dB" else if (db < 0) "$db dB" else "0 dB"
 
-    /** Convert a raw ALSA value to the dB equivalent using controller calibration. */
+    /**
+     * Update the on-screen value label below the mic slider to mirror the
+     * current slider thumb position during a drag, before the store is
+     * committed. Matches the format [bindStateInternal] would have set had
+     * the value come from the store — same "raw integer" in GAIN mode,
+     * same "±N dB" string in LEVEL mode — so the label never diverges from
+     * the thumb the user is holding.
+     *
+     * Called from [bindUi]'s `addOnChangeListener` only while
+     * [isDraggingMic1] / [isDraggingMic2] is true (the listener short-
+     * circuits the store update in that window). After touch end the
+     * store commits and bindState re-renders the label from the store,
+     * which now matches the slider value.
+     */
+    private fun updateMicValueLabel(mic: Int, sliderValue: Int, state: MicStateStore.State) {
+        val isGainModeEffective = state.gainControlMode == GainControlMode.ANALOG_GAIN &&
+            (alsaController?.isAnalogGainReady == true)
+        val text = if (isGainModeEffective) sliderValue.toString() else formatGain(sliderValue)
+        val view = if (mic == 1) binding.mic1Value else binding.mic2Value
+        view.text = text
+    }
+
+    /** Convert a raw ALSA value to the dB equivalent using controller calibration.
+     *
+     *  Uses [roundToInt] (not truncate) so the dB the slider writes into the
+     *  store round-trips losslessly through [dbToRaw] — see the
+     *  [AlsaGainController.setAnalogGainDb] comment for the full rationale.
+     *  In short: with a 1.5 dB codec step and int dB storage, truncating
+     *  here makes odd-integer raws (e.g. 13) store as 1 dB instead of 2,
+     *  which then reverse-engineers to raw 12 — the slider "drags back"
+     *  by one and the notification's ±1 stalls.
+     */
     private fun rawToDb(raw: Int, controller: AlsaGainController?): Int {
         val range = controller?.mic1ControlRange() ?: return raw
-        return ((raw - range.defaultVal) * range.stepDb).toInt()
+        return ((raw - range.defaultVal) * range.stepDb).roundToInt()
     }
 
     /** Convert a dB value to the nearest raw ALSA value using controller calibration. */
     private fun dbToRaw(db: Int, controller: AlsaGainController?): Int {
         val range = controller?.mic1ControlRange() ?: return db
-        return ((db / range.stepDb) + range.defaultVal).toInt()
+        return ((db / range.stepDb) + range.defaultVal).roundToInt()
             .coerceIn(range.min, range.max)
     }
 

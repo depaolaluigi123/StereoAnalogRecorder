@@ -3,14 +3,26 @@
 #  install-android-with-build-alsa-driver.sh
 #      Developer build/install script for Stereo Analog Recorder.
 #
-#      Companion to install-android.sh: does everything install-android.sh
-#      does, PLUS it builds the bits install-android.sh takes for granted:
+#      Builds the bits that ship inside the app:
 #        - cross-compiles tinymix from dependencies/src/tinyalsa-master.zip
-#          using the locally-installed Android NDK
+#          using the locally-installed Android NDK, for **every** supported
+#          ABI (arm64-v8a, armeabi-v7a, x86_64, x86) — no per-ABI opt-out,
+#          the resulting APK must always include all four so it works on
+#          any device a user might install it on
+#        - copies the freshly-built binaries into the APK assets folder
+#          (app/src/main/assets/tinymix/<android-abi>/tinymix) so they get
+#          packaged into the next Gradle build
 #        - builds the debug APK with Gradle against the locally-installed
 #          Android SDK (compileSdk = 34, targetSdk = 34)
-#        - refreshes dependencies/apk/app-debug.apk with the freshly-built APK
-#          so install-android.sh picks it up on the next run
+#        - installs the resulting APK on the connected device from
+#          app/build/outputs/apk/debug/app-debug.apk (the canonical Gradle
+#          output) and grants runtime permissions
+#
+#      The app extracts the bundled tinymix from the APK assets into its
+#      own private data directory on first launch, so no device-side binary
+#      deploy is needed. There is no separate "minimal installer" because
+#      there is nothing left to copy to the device — installation is a
+#      single `adb install`.
 # ============================================================================
 #
 #  The script NEVER reaches the network. It assumes the following pieces are
@@ -36,9 +48,9 @@
 #     --sdk-dir <path>         Override Android SDK location
 #                              (default: $HOME/Android/Sdk, then $ANDROID_HOME,
 #                              then $ANDROID_SDK_ROOT)
-#     --all-archs              Cross-compile tinymix for all 4 ABIs
-#                              (default: only the device's primary ABI)
-#     --no-tinymix             Skip the tinymix build/deploy step
+#     --no-tinymix             Skip the tinymix cross-compile + assets sync
+#                              step (assets/ is left as-is — useful if you
+#                              only want to rebuild the APK with Gradle)
 #     --no-apk                 Skip the Gradle build + APK install step
 #     -h, --help               Show this help
 #
@@ -60,17 +72,12 @@ PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 DEPS_DIR="${PROJECT_ROOT}/dependencies"
 DEPS_SRC_ZIP="${DEPS_DIR}/src/tinyalsa-master.zip"
 DEPS_SRC_DIR="${DEPS_DIR}/src/tinyalsa"   # extracted source (temporary)
-DEPS_BIN_DIR="${DEPS_DIR}/tinymix"        # cached binaries
+ASSETS_BIN_DIR="${PROJECT_ROOT}/app/src/main/assets/tinymix"  # packaged into APK
 APK_BUILD_PATH="${PROJECT_ROOT}/app/build/outputs/apk/debug/app-debug.apk"
-APK_DEPS_PATH="${DEPS_DIR}/apk/app-debug.apk"
-
-# Where to push tinymix on the device.
-TINYMIX_REMOTE="/data/local/tmp/tinymix"
 
 # Defaults
 DEVICE_SERIAL=""
 SDK_DIR_OVERRIDE=""
-BUILD_ALL_ARCHS=false
 SKIP_TINYMIX=false
 SKIP_APK=false
 
@@ -110,7 +117,6 @@ while [[ $# -gt 0 ]]; do
     case "$1" in
         --device)        shift; DEVICE_SERIAL="$1" ;;
         --sdk-dir)       shift; SDK_DIR_OVERRIDE="$1" ;;
-        --all-archs)     BUILD_ALL_ARCHS=true ;;
         --no-tinymix)    SKIP_TINYMIX=true ;;
         --no-apk)        SKIP_APK=true ;;
         -h|--help)
@@ -274,9 +280,12 @@ else
 fi
 
 # ============================================================================
-# STEP 2: Detect device properties (only when a device is connected)
+# STEP 2: Detect device properties (only when a device is connected).
+#         Used for logging + summary; doesn't affect what we build — we
+#         always compile tinymix for all 4 ABIs so the APK works on any
+#         device.
 # ============================================================================
-DEVICE_ABI="arm64-v8a"
+DEVICE_ABI="unknown"
 DEVICE_API=26
 DEVICE_MODEL="unknown"
 DEVICE_MANUFACTURER=""
@@ -301,7 +310,7 @@ if [[ "$DEVICE_AVAILABLE" == "true" ]]; then
         fi
     fi
 
-    [[ -z "$DEVICE_ABI" ]] && DEVICE_ABI="arm64-v8a"
+    [[ -z "$DEVICE_ABI" ]] && DEVICE_ABI="unknown"
     [[ -z "$DEVICE_API" ]] && DEVICE_API=26
     [[ -z "$DEVICE_MODEL" ]] && DEVICE_MODEL="unknown"
 
@@ -311,97 +320,15 @@ if [[ "$DEVICE_AVAILABLE" == "true" ]]; then
     log_info "API level:    $DEVICE_API"
 fi
 
-# Map device ABI → NDK target triple / arch.
-case "$DEVICE_ABI" in
-    arm64-v8a|arm64|aarch64)
-        TARGET_TRIPLE="aarch64-linux-android"; NDK_ARCH="arm64"; NDK_API=28 ;;
-    armeabi-v7a|armeabi|arm)
-        TARGET_TRIPLE="armv7a-linux-androideabi"; NDK_ARCH="arm"; NDK_API=21 ;;
-    x86_64)
-        TARGET_TRIPLE="x86_64-linux-android"; NDK_ARCH="x86_64"; NDK_API=21 ;;
-    x86|i686|i386)
-        TARGET_TRIPLE="i686-linux-android"; NDK_ARCH="x86"; NDK_API=21 ;;
-    *)
-        log_warn "Unknown ABI '$DEVICE_ABI', falling back to arm64-v8a"
-        TARGET_TRIPLE="aarch64-linux-android"; NDK_ARCH="arm64"; NDK_API=28 ;;
-esac
-
-# Pick the cross-compiler for the device's primary ABI (always available —
-# we already verified the NDK above).
-TARGET_CLANG="${CLANG_DIR}/${TARGET_TRIPLE}${NDK_API}-clang"
-if [[ ! -x "$TARGET_CLANG" ]]; then
-    TARGET_CLANG="${CLANG_DIR}/${TARGET_TRIPLE}-clang"
-fi
-[[ -x "$TARGET_CLANG" ]] || die "No NDK compiler found for ${TARGET_TRIPLE} in this NDK."
-log_info "Compiler for device ABI: $TARGET_CLANG"
-
 # ============================================================================
-# STEP 3: Build the debug APK
-# ============================================================================
-APK_BUILT=false
-if [[ "$SKIP_APK" != "true" ]]; then
-    log_step "3. Building the debug APK..."
-
-    # local.properties — point Gradle at the resolved SDK + NDK.
-    LOCAL_PROPS="$PROJECT_ROOT/local.properties"
-    NEEDS_LOCAL_PROPS_WRITE=false
-    if [[ -f "$LOCAL_PROPS" ]]; then
-        existing_sdk=$(grep -E '^[[:space:]]*sdk\.dir=' "$LOCAL_PROPS" 2>/dev/null \
-                       | head -1 | sed -E 's/^[[:space:]]*sdk\.dir=//' || true)
-        if [[ -z "$existing_sdk" || ! -d "$existing_sdk" \
-              || "$(cd "$existing_sdk" 2>/dev/null && pwd -P || echo "$existing_sdk")" \
-                 != "$(cd "$ANDROID_SDK" 2>/dev/null && pwd -P || echo "$ANDROID_SDK")" ]]; then
-            NEEDS_LOCAL_PROPS_WRITE=true
-        fi
-    else
-        NEEDS_LOCAL_PROPS_WRITE=true
-    fi
-    if [[ "$NEEDS_LOCAL_PROPS_WRITE" == "true" ]]; then
-        log_info "Writing local.properties (sdk.dir=$ANDROID_SDK, ndk.dir=$NDK_ROOT)"
-        {
-            echo "sdk.dir=$ANDROID_SDK"
-            echo "ndk.dir=$NDK_ROOT"
-        } > "$LOCAL_PROPS"
-    fi
-
-    cd "$PROJECT_ROOT" || die "Cannot cd to $PROJECT_ROOT"
-    [[ -f "$PROJECT_ROOT/gradlew" ]] || die "gradlew not found in $PROJECT_ROOT."
-    [[ -x "$PROJECT_ROOT/gradlew" ]] || chmod +x "$PROJECT_ROOT/gradlew"
-
-    # When local.properties changed, the Gradle daemon keeps a stale in-memory
-    # snapshot. Stop it so the next build re-reads local.properties.
-    if [[ "$NEEDS_LOCAL_PROPS_WRITE" == "true" ]]; then
-        log_cmd "Stopping Gradle daemons (local.properties changed)..."
-        ./gradlew --stop >/dev/null 2>&1 || true
-    fi
-
-    if ! ./gradlew assembleDebug 2>&1 | tail -25; then
-        die "gradlew assembleDebug failed. Check the output above for errors."
-    fi
-
-    if [[ ! -f "$APK_BUILD_PATH" ]]; then
-        die "APK not found at expected path: $APK_BUILD_PATH"
-    fi
-    APK_SIZE=$(stat -c%s "$APK_BUILD_PATH" 2>/dev/null \
-        || stat -f%z "$APK_BUILD_PATH" 2>/dev/null \
-        || echo "?")
-    log_info "APK built: $APK_BUILD_PATH ($APK_SIZE bytes)"
-
-    # Refresh dependencies/apk/app-debug.apk so install-android.sh picks up the
-    # new build on the next run.
-    mkdir -p "$(dirname "$APK_DEPS_PATH")"
-    cp "$APK_BUILD_PATH" "$APK_DEPS_PATH"
-    log_info "Updated $APK_DEPS_PATH with the freshly-built APK"
-    APK_BUILT=true
-else
-    log_skip "APK build skipped (--no-apk)"
-fi
-
-# ============================================================================
-# STEP 4: Cross-compile tinymix from dependencies/src/tinyalsa-master.zip
+# STEP 3: Cross-compile tinymix from dependencies/src/tinyalsa-master.zip
+#         for **every supported ABI**, writing the resulting binary
+#         straight into the APK assets folder (one per ABI directory).
+#         Runs BEFORE the Gradle build so the freshly-compiled binaries
+#         are picked up when Gradle packages the APK.
 # ============================================================================
 if [[ "$SKIP_TINYMIX" != "true" ]]; then
-    log_step "4. Building tinymix from source..."
+    log_step "3. Building tinymix from source (all 4 ABIs)..."
 
     if [[ ! -s "$DEPS_SRC_ZIP" ]]; then
         die "tinyalsa source archive missing at $DEPS_SRC_ZIP.
@@ -411,26 +338,23 @@ if [[ "$SKIP_TINYMIX" != "true" ]]; then
     fi
     log_info "tinyalsa source: $DEPS_SRC_ZIP"
 
-    # Build the list of architectures to compile. Default is the device's
-    # primary ABI; --all-archs covers all four.
-    declare -A TARGETS
-    if [[ "$BUILD_ALL_ARCHS" == "true" ]]; then
-        TARGETS[arm64]="aarch64-linux-android:28:-march=armv8-a"
-        TARGETS[arm]="armv7a-linux-androideabi:21:-march=armv7-a -mfpu=neon -mfloat-abi=softfp"
-        TARGETS[x86_64]="x86_64-linux-android:21:-march=x86-64"
-        TARGETS[x86]="i686-linux-android:21:-march=i686"
-        log_info "Cross-compiling tinymix for ALL architectures (--all-archs)"
-    else
-        TARGETS[$NDK_ARCH]="$TARGET_TRIPLE:$NDK_API:"
-        # Pull in the -march flag for the chosen arch.
-        case "$NDK_ARCH" in
-            arm64)  TARGETS[$NDK_ARCH]="${TARGETS[$NDK_ARCH]} -march=armv8-a" ;;
-            arm)    TARGETS[$NDK_ARCH]="${TARGETS[$NDK_ARCH]} -march=armv7-a -mfpu=neon -mfloat-abi=softfp" ;;
-            x86_64) TARGETS[$NDK_ARCH]="${TARGETS[$NDK_ARCH]} -march=x86-64" ;;
-            x86)    TARGETS[$NDK_ARCH]="${TARGETS[$NDK_ARCH]} -march=i686" ;;
-        esac
-        log_info "Cross-compiling tinymix for $NDK_ARCH (device primary ABI)"
-    fi
+    # All four supported ABIs — the APK must always include tinymix for
+    # every ABI so it works on any device a user might install it on.
+    # Format: "<ndk-arch>:<target-triple>:<api-level>:<-march flags>"
+    declare -A TARGETS=(
+        [arm64]="aarch64-linux-android:28:-march=armv8-a"
+        [arm]="armv7a-linux-androideabi:21:-march=armv7-a -mfpu=neon -mfloat-abi=softfp"
+        [x86_64]="x86_64-linux-android:21:-march=x86-64"
+        [x86]="i686-linux-android:21:-march=i686"
+    )
+    # Map NDK arch dir name (arm64/arm/x86_64/x86) → Android ABI directory
+    # name (arm64-v8a/armeabi-v7a/x86_64/x86) used inside the APK assets.
+    declare -A NDK_ARCH_TO_ANDROID_ABI=(
+        [arm64]=arm64-v8a
+        [arm]=armeabi-v7a
+        [x86_64]=x86_64
+        [x86]=x86
+    )
 
     # Extract tinyalsa to a temporary working dir.
     TMP_EXTRACT="${DEPS_DIR}/src/_tmp_extract"
@@ -497,12 +421,16 @@ if [[ "$SKIP_TINYMIX" != "true" ]]; then
                  tinymix 2>"$BUILD_DIR/${arch}-utils-err.log"
         ) || { cat "$BUILD_DIR/${arch}-utils-err.log"; die "tinymix build failed for $arch"; }
 
-        # Cache the resulting binary in dependencies/tinymix/<arch>/tinymix.
-        mkdir -p "$DEPS_BIN_DIR/$arch"
-        cp "$DEPS_SRC_DIR/utils/tinymix" "$DEPS_BIN_DIR/$arch/tinymix"
-        chmod +x "$DEPS_BIN_DIR/$arch/tinymix"
-        file_out=$(file "$DEPS_BIN_DIR/$arch/tinymix" 2>/dev/null || echo "unknown")
-        log_info "  → $DEPS_BIN_DIR/$arch/tinymix"
+        # Drop the freshly built binary straight into the APK assets
+        # folder for its Android ABI — that's what Gradle will package
+        # into the APK on the next step.
+        android_abi="${NDK_ARCH_TO_ANDROID_ABI[$arch]}"
+        dst="$ASSETS_BIN_DIR/$android_abi/tinymix"
+        mkdir -p "$(dirname "$dst")"
+        cp "$DEPS_SRC_DIR/utils/tinymix" "$dst"
+        chmod +x "$dst"
+        file_out=$(file "$dst" 2>/dev/null || echo "unknown")
+        log_info "  → $dst"
         log_info "    $file_out"
     done
 
@@ -515,17 +443,75 @@ else
 fi
 
 # ============================================================================
+# STEP 4: Build the debug APK with Gradle. Runs AFTER the tinymix step so
+#         the freshly-compiled per-ABI binaries are already sitting under
+#         app/src/main/assets/tinymix/ when Gradle packages the APK.
+# ============================================================================
+APK_BUILT=false
+if [[ "$SKIP_APK" != "true" ]]; then
+    log_step "4. Building the debug APK..."
+
+    # local.properties — point Gradle at the resolved SDK + NDK.
+    LOCAL_PROPS="$PROJECT_ROOT/local.properties"
+    NEEDS_LOCAL_PROPS_WRITE=false
+    if [[ -f "$LOCAL_PROPS" ]]; then
+        existing_sdk=$(grep -E '^[[:space:]]*sdk\.dir=' "$LOCAL_PROPS" 2>/dev/null \
+                       | head -1 | sed -E 's/^[[:space:]]*sdk\.dir=//' || true)
+        if [[ -z "$existing_sdk" || ! -d "$existing_sdk" \
+              || "$(cd "$existing_sdk" 2>/dev/null && pwd -P || echo "$existing_sdk")" \
+                 != "$(cd "$ANDROID_SDK" 2>/dev/null && pwd -P || echo "$ANDROID_SDK")" ]]; then
+            NEEDS_LOCAL_PROPS_WRITE=true
+        fi
+    else
+        NEEDS_LOCAL_PROPS_WRITE=true
+    fi
+    if [[ "$NEEDS_LOCAL_PROPS_WRITE" == "true" ]]; then
+        log_info "Writing local.properties (sdk.dir=$ANDROID_SDK, ndk.dir=$NDK_ROOT)"
+        {
+            echo "sdk.dir=$ANDROID_SDK"
+            echo "ndk.dir=$NDK_ROOT"
+        } > "$LOCAL_PROPS"
+    fi
+
+    cd "$PROJECT_ROOT" || die "Cannot cd to $PROJECT_ROOT"
+    [[ -f "$PROJECT_ROOT/gradlew" ]] || die "gradlew not found in $PROJECT_ROOT."
+    [[ -x "$PROJECT_ROOT/gradlew" ]] || chmod +x "$PROJECT_ROOT/gradlew"
+
+    # When local.properties changed, the Gradle daemon keeps a stale in-memory
+    # snapshot. Stop it so the next build re-reads local.properties.
+    if [[ "$NEEDS_LOCAL_PROPS_WRITE" == "true" ]]; then
+        log_cmd "Stopping Gradle daemons (local.properties changed)..."
+        ./gradlew --stop >/dev/null 2>&1 || true
+    fi
+
+    if ! ./gradlew assembleDebug 2>&1 | tail -25; then
+        die "gradlew assembleDebug failed. Check the output above for errors."
+    fi
+
+    if [[ ! -f "$APK_BUILD_PATH" ]]; then
+        die "APK not found at expected path: $APK_BUILD_PATH"
+    fi
+    APK_SIZE=$(stat -c%s "$APK_BUILD_PATH" 2>/dev/null \
+        || stat -f%z "$APK_BUILD_PATH" 2>/dev/null \
+        || echo "?")
+    log_info "APK built: $APK_BUILD_PATH ($APK_SIZE bytes)"
+    APK_BUILT=true
+else
+    log_skip "APK build skipped (--no-apk)"
+fi
+
+# ============================================================================
 # STEP 5: Install the APK (only when a device is connected)
 # ============================================================================
 APK_INSTALLED=false
 if [[ "$SKIP_APK" != "true" && "$DEVICE_AVAILABLE" == "true" ]]; then
     log_step "5. Installing the APK on the device..."
 
-    if [[ ! -f "$APK_DEPS_PATH" ]]; then
-        die "APK not found at $APK_DEPS_PATH. Build it first (drop --no-apk)."
+    if [[ ! -f "$APK_BUILD_PATH" ]]; then
+        die "APK not found at $APK_BUILD_PATH. Build it first (drop --no-apk)."
     fi
 
-    if ! $ADB install -r -t -d "$APK_DEPS_PATH" 2>&1 | tail -5; then
+    if ! $ADB install -r -t -d "$APK_BUILD_PATH" 2>&1 | tail -5; then
         die "APK install failed. Check the output above for errors."
     fi
     INSTALLED=$($ADB shell pm list packages 2>/dev/null | grep "package:${APP_PACKAGE}$" || true)
@@ -557,90 +543,35 @@ else
 fi
 
 # ============================================================================
-# STEP 6: Deploy tinymix to the device
-# ============================================================================
-if [[ "$SKIP_TINYMIX" != "true" && "$DEVICE_AVAILABLE" == "true" ]]; then
-    log_step "6. Deploying tinymix to the device..."
-
-    TINYMIX_BINARY="$DEPS_BIN_DIR/$NDK_ARCH/tinymix"
-    if [[ ! -x "$TINYMIX_BINARY" ]]; then
-        die "tinymix binary for $NDK_ARCH not found at $TINYMIX_BINARY.
-  Re-run without --no-tinymix and with the device connected, or pass
-  --all-archs to build tinymix for every ABI."
-    fi
-    file_out=$(file "$TINYMIX_BINARY" 2>/dev/null || echo "unknown")
-    log_info "Using $TINYMIX_BINARY"
-    log_info "  $file_out"
-
-    $ADB push "$TINYMIX_BINARY" "$TINYMIX_REMOTE" >/dev/null 2>&1 || \
-        die "Failed to push tinymix to device."
-    $ADB shell "chmod 755 ${TINYMIX_REMOTE}" >/dev/null 2>&1 || true
-    log_info "tinymix deployed to ${TINYMIX_REMOTE}"
-
-    if $ADB shell "${TINYMIX_REMOTE} --help" >/dev/null 2>&1; then
-        log_info "tinymix runs correctly on this device"
-    else
-        log_warn "tinymix may need root to run correctly"
-    fi
-
-    log_step "6b. Installing tinymix into the app's private data..."
-
-    can_root=false
-    if $ADB root >/dev/null 2>&1; then
-        can_root=true
-        log_info "adb root succeeded"
-    elif $ADB shell "su -c id -u" 2>/dev/null | tr -d '\r\n' | grep -q "^0$"; then
-        can_root=true
-        log_info "Magisk su available (id=0 from su -c id)"
-    else
-        log_info "No adb root, no working Magisk su — running unprivileged"
-    fi
-
-    if [[ "$can_root" == "true" ]]; then
-        $ADB shell "mkdir -p ${APP_DATA_DIR}/files" 2>/dev/null || true
-        APP_TINYMIX="${APP_DATA_DIR}/files/tinymix"
-        if $ADB shell "cp ${TINYMIX_REMOTE} ${APP_TINYMIX}" >/dev/null 2>&1; then
-            $ADB shell "chmod 755 ${APP_TINYMIX}" >/dev/null 2>&1 || true
-            # `cp` from /data/local/tmp can carry over the tmpfs SELinux context.
-            # restorecon re-labels the file so the app can actually exec it.
-            $ADB shell "restorecon ${APP_TINYMIX}" >/dev/null 2>&1 || true
-            $ADB shell "rm ${TINYMIX_REMOTE}" >/dev/null 2>&1 || true
-            TINYMIX_REMOTE="${APP_TINYMIX}"
-            log_info "Replaced app's tinymix with ${NDK_ARCH} version at ${APP_TINYMIX}"
-            log_info "Removed staging copy at /data/local/tmp/tinymix"
-        else
-            log_warn "Could not install tinymix into app data — staging copy at ${TINYMIX_REMOTE} remains, but the app cannot use it (no fallback path)"
-        fi
-    else
-        log_info "Without root, tinymix is only at ${TINYMIX_REMOTE} — the app cannot use it from there"
-    fi
-elif [[ "$SKIP_TINYMIX" == "true" ]]; then
-    log_skip "tinymix deploy skipped (--no-tinymix)"
-else
-    log_skip "tinymix deploy skipped (no authorized device)"
-fi
-
-# ============================================================================
-# STEP 7: Verification (only when a device is connected)
+# STEP 6: Verification (only when a device is connected)
 # ============================================================================
 if [[ "$DEVICE_AVAILABLE" == "true" ]]; then
-    log_step "7. Verifying installation..."
+    log_step "6. Verifying installation..."
 
     APP_VER=$($ADB shell dumpsys package "$APP_PACKAGE" 2>/dev/null | grep "versionName=" | head -1 | sed 's/.*versionName=//' || echo "unknown")
     log_info "Installed version: ${APP_VER}"
 
     if [[ "$SKIP_TINYMIX" != "true" ]]; then
-        SMOKE=$($ADB shell "${TINYMIX_REMOTE} controls" 2>/dev/null | head -5 || true)
-        if [[ -n "$SMOKE" ]]; then
-            log_info "tinymix controls smoke test OK"
-            log_cmd "$(echo "$SMOKE" | tr '\n' ' ' | cut -c1-120)..."
-        else
-            log_warn "tinymix controls smoke test failed (root may not be granted yet)"
-        fi
+        # tinymix lives at <app-data>/files/tinymix once the app has launched
+        # and extracted it from the APK assets. We can poke at it via root
+        # for a sanity check; without root we just verify the APK was
+        # installed (the app will surface extraction errors in its UI).
+        APP_TINYMIX="${APP_DATA_DIR}/files/tinymix"
+        if $ADB shell "test -x ${APP_TINYMIX}" >/dev/null 2>&1; then
+            SMOKE=$($ADB shell "${APP_TINYMIX} controls" 2>/dev/null | head -5 || true)
+            if [[ -n "$SMOKE" ]]; then
+                log_info "tinymix controls smoke test OK"
+                log_cmd "$(echo "$SMOKE" | tr '\n' ' ' | cut -c1-120)..."
+            else
+                log_warn "tinymix controls smoke test failed (root may not be granted yet)"
+            fi
 
-        ADC_CT=$($ADB shell "${TINYMIX_REMOTE} contents" 2>/dev/null | grep -ci "ADC" || true)
-        if [[ "${ADC_CT:-0}" -gt 0 ]]; then
-            log_info "Found $ADC_CT ADC-related controls via tinymix"
+            ADC_CT=$($ADB shell "${APP_TINYMIX} contents" 2>/dev/null | grep -ci "ADC" || true)
+            if [[ "${ADC_CT:-0}" -gt 0 ]]; then
+                log_info "Found $ADC_CT ADC-related controls via tinymix"
+            fi
+        else
+            log_warn "tinymix not yet extracted at ${APP_TINYMIX} — open the app once so it can pull the binary out of the APK assets"
         fi
     fi
 else
@@ -660,22 +591,22 @@ if [[ "$DEVICE_AVAILABLE" == "true" ]]; then
     echo -e "  Device:       ${CYAN}${DEVICE_MODEL} (${DEVICE_ABI}, API ${DEVICE_API})${NC}"
 fi
 if [[ "$SKIP_APK" != "true" ]]; then
-    echo -e "  APK build:    ${CYAN}$APK_BUILD_PATH${NC}"
-    echo -e "  APK shipped:  ${CYAN}$APK_DEPS_PATH${NC}"
+    echo -e "  APK:          ${CYAN}$APK_BUILD_PATH${NC}"
 fi
 if [[ "$SKIP_TINYMIX" != "true" ]]; then
-    if [[ "$BUILD_ALL_ARCHS" == "true" ]]; then
-        echo -e "  tinymix:      ${CYAN}all 4 ABIs in $DEPS_BIN_DIR/<arch>/tinymix${NC}"
-    else
-        echo -e "  tinymix:      ${CYAN}$DEPS_BIN_DIR/$NDK_ARCH/tinymix${NC}"
-    fi
-    if [[ "$DEVICE_AVAILABLE" == "true" ]]; then
-        echo -e "  Device path:  ${CYAN}${TINYMIX_REMOTE}${NC}"
-        echo -e "  Root access:  ${CYAN}$([ "${can_root:-false}" = "true" ] && echo 'Yes' || echo 'No — limited ALSA')${NC}"
-    fi
+    echo -e "  tinymix:      ${CYAN}all 4 ABIs built from source, embedded in APK assets${NC}"
+    echo -e "  asset path:   ${CYAN}$ASSETS_BIN_DIR/<android-abi>/tinymix${NC}"
 fi
 echo -e ""
-if [[ "${can_root:-false}" != "true" && "$SKIP_TINYMIX" != "true" && "$DEVICE_AVAILABLE" == "true" ]]; then
-    echo -e "  ${YELLOW}NOTE: Without root, the analog pre-ADC gain path is unavailable.${NC}"
-    echo -e "  ${YELLOW}      The app falls back to digital DSP gain only.${NC}"
+echo -e "  Next steps:"
+echo -e "    1. Open Stereo Analog Recorder on the device"
+echo -e "    2. Grant MICROPHONE permission when prompted"
+echo -e "    3. On first launch the app will extract tinymix from the APK"
+echo -e "       assets into its private files directory"
+echo -e "    4. If rooted, grant root via Magisk"
+echo -e "    5. Check the ALSA status indicator in the UI"
+echo -e ""
+if [[ "$DEVICE_AVAILABLE" == "true" ]]; then
+    echo -e "  ${YELLOW}NOTE: Without root, the analog pre-ADC gain path is unavailable;${NC}"
+    echo -e "  ${YELLOW}      the app falls back to digital DSP gain only.${NC}"
 fi

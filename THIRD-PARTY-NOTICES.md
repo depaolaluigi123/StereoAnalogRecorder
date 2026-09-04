@@ -9,10 +9,13 @@ License texts are reproduced below as required by each license.
 
 - **Upstream**: https://github.com/tinyalsa/tinyalsa
 - **Version**: tinyalsa 2.0.0, commit `9fab97c` (master, 2026-07-27)
-- **Distribution form**: prebuilt ELF binaries for `arm64-v8a`, `armeabi-v7a`,
-  `x86_64`, and `x86` under `dependencies/tinymix/<arch>/tinymix`, plus the
-  unmodified source archive `dependencies/src/tinyalsa-master.zip` for users
-  who want to rebuild from source.
+- **Distribution form**: the unmodified source archive
+  `dependencies/src/tinyalsa-master.zip`. Each release of Stereo Analog
+  Recorder includes an APK with prebuilt ELF binaries for `arm64-v8a`,
+  `armeabi-v7a`, `x86_64`, and `x86` packaged as assets inside the APK
+  (under `assets/tinymix/<android-abi>/tinymix`); the binaries are
+  produced from this source by `install-android-with-build-alsa-driver.sh`
+  at build time.
 - **License**: BSD 3-Clause "New" / "Revised" License
 - **Copyright**: Copyright 2011, The Android Open Source Project.
   Copyright (c) 2019, The Linux Foundation.

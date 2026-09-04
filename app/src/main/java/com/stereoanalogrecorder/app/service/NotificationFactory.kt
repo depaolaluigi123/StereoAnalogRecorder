@@ -17,6 +17,7 @@ import com.stereoanalogrecorder.app.settings.LocaleManager
 import com.stereoanalogrecorder.app.settings.PreferencesRepository
 import com.stereoanalogrecorder.app.state.MicStateStore
 import com.stereoanalogrecorder.app.ui.MainActivity
+import kotlin.math.roundToInt
 
 /**
  * Builds the foreground notifications used by the always-on capture services.
@@ -200,7 +201,12 @@ object NotificationFactory {
      */
     private fun dbToRaw(db: Int, controller: AlsaGainController): Int {
         val range = controller.mic1ControlRange() ?: return db
-        return ((db / range.stepDb) + range.defaultVal).toInt()
+        // Round-to-nearest (matches AlsaGainController.setAnalogGainDb and
+        // MainActivity.dbToRaw). Truncating here would show the same "doesn't
+        // go / goes by 2" glitch on the notification as the ±1 button, since
+        // both share the dB→raw path. See AlsaGainController for the
+        // stepDb / 1.5-dB-step rationale.
+        return ((db / range.stepDb) + range.defaultVal).roundToInt()
             .coerceIn(range.min, range.max)
     }
 

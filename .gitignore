@@ -8,10 +8,7 @@
 .externalNativeBuild
 .cxx
 app/build
-
 .claude
+Releases
 
-# install-android.sh is fully self-contained: it only needs a prebuilt APK
-# and prebuilt tinymix binaries. No SDK, no NDK, no Gradle. The `dependencies/`
-# directory ships everything the script needs.
 

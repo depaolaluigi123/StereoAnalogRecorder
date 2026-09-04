@@ -18,6 +18,7 @@ import com.stereoanalogrecorder.app.audio.CaptureSession
 import com.stereoanalogrecorder.app.audio.MicCapture
 import com.stereoanalogrecorder.app.settings.GainControlMode
 import com.stereoanalogrecorder.app.state.MicStateStore
+import kotlin.math.roundToInt
 
 /**
  * Owns the single always-on [MicCapture] while the app is in the foreground or
@@ -127,12 +128,25 @@ class LiveCaptureService : Service() {
         if (effectiveGainMode) {
             // The user-facing value in this mode is the raw ALSA integer
             // (e.g. 0..20), so the button steps it by 1 in raw units.
+            //
+            // ROUND-TO-NEAREST for the dB→raw conversion (see also
+            // AlsaGainController.setAnalogGainDb). Truncating toward zero
+            // here would make the +1 button stall: the store holds an
+            // integer dB (e.g. 1) that, when reverse-engineered to raw,
+            // rounds DOWN to the same raw the user is already on (e.g.
+            // raw 12) — so newRaw == currentRaw and the press is a no-op
+            // that the user sees as "didn't go". It would also produce
+            // the inverse glitch: when the truncated step count finally
+            // advances by one, the stored dB jumps by 2 (e.g. 1 → 3),
+            // and the notification's ±1 button appears to skip a step.
+            // Round-to-nearest keeps currentRaw in sync with the codec's
+            // actual raw, so each press moves exactly one raw.
             val range = alsaController.mic1ControlRange() ?: return null
-            val currentRaw = ((currentDb / range.stepDb) + range.defaultVal).toInt()
+            val currentRaw = ((currentDb / range.stepDb) + range.defaultVal).roundToInt()
                 .coerceIn(range.min, range.max)
             val newRaw = (currentRaw + delta).coerceIn(range.min, range.max)
             if (newRaw == currentRaw) return null
-            return ((newRaw - range.defaultVal) * range.stepDb).toInt()
+            return ((newRaw - range.defaultVal) * range.stepDb).roundToInt()
         } else {
             // LEVEL mode: dB directly, bounds = ±maxGainScale.
             val newDb = (currentDb + delta).coerceIn(-maxGainScale, maxGainScale)

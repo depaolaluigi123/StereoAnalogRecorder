@@ -6,29 +6,21 @@ L'obiettivo principale è semplice: darti un controllo preciso sulla sensibilit�
 
 ## Script di installazione
 
-Questo repository contiene **due** script di installazione. Scegli quello più adatto alla tua situazione — la maggior parte degli utenti ha bisogno solo del primo:
+**[`install-android-with-build-alsa-driver.sh`](install-android-with-build-alsa-driver.sh)** — *Script di build + install per sviluppatori*. Cross-compila `tinymix` dai sorgenti di tinyalsa inclusi (tramite il toolchain clang dell'NDK) **per tutte e quattro le ABI supportate** e scrive i binari direttamente dentro la cartella asset dell'APK, poi compila l'APK debug con Gradle (tramite l'SDK Android) in modo che le modifiche a `tinymix` finiscano nell'APK risultante, e infine installa l'APK sul dispositivo e grant dei permessi runtime. Entrambi si appoggiano a SDK Android + NDK installati localmente — Gradle usa l'SDK, il build C/C++ usa l'NDK. Richiede JDK 17+, Android SDK con `platform-tools`, `platforms;android-34`, `build-tools;34.0.0` e un NDK (famiglia r27).
 
-- **[`install-android.sh`](install-android.sh)** — *Installer one-shot minimale* (consigliato per la maggior parte degli utenti). Installa l'APK precompilato e l'helper `tinymix` precompilato inclusi in `dependencies/` su un dispositivo connesso. Richiede solo `adb` e `file` sull'host. **Niente Android SDK, niente NDK, niente Gradle, niente accesso alla rete.**
-
-- **[`install-android-with-build-alsa-driver.sh`](install-android-with-build-alsa-driver.sh)** — *Script di build + install per sviluppatori*. Fa tutto quello che fa `install-android.sh`, **e in più** compila l'APK debug con Gradle (tramite l'SDK Android) e cross-compila `tinymix` dai sorgenti di tinyalsa inclusi (tramite il toolchain clang dell'NDK). Entrambi si appoggiano a SDK Android + NDK installati localmente — Gradle usa l'SDK, il build C/C++ usa l'NDK. Richiede JDK 17+, Android SDK con `platform-tools`, `platforms;android-34`, `build-tools;34.0.0` e un NDK (famiglia r27).
+Per gli utenti che non vogliono rebuildare nulla: scarica l'ultima APK da [Releases](../../releases) e installala con `adb install -r app-debug.apk`. **L'APK è già self-contained**: il binario `tinymix` per tutte e quattro le ABI è impacchettato come asset e l'app lo estrae automaticamente al primo avvio nella propria directory privata.
 
 ---
 
 ## Dipendenze incluse
 
-Questo repository è autosufficiente: include l'APK precompilato e i binari
-prebuilt di `tinymix` per tutte e quattro le ABI supportate (arm64-v8a,
-armeabi-v7a, x86_64, x86). Per installare l'app sul device non servono
-SDK, NDK né connessione di rete.
+Il repository contiene solo i sorgenti necessari alla compilazione dei binari `tinymix`:
 
 | Dipendenza | Versione | Provenienza |
 |---|---|---|
-| `tinymix` / `libtinyalsa` (prebuilt) | tinyalsa **2.0.0**, commit `9fab97c` (master, 2026-07-27) | [github.com/tinyalsa/tinyalsa](https://github.com/tinyalsa/tinyalsa) |
-| APK debug | compilato dal codice sorgente attuale | committato in questo repo |
+| `tinymix` / `libtinyalsa` (sorgenti) | tinyalsa **2.0.0**, commit `9fab97c` (master, 2026-07-27) | [github.com/tinyalsa/tinyalsa](https://github.com/tinyalsa/tinyalsa) |
 
-Gli sviluppatori che vogliono ribuildare l'APK o i prebuilt di `tinymix`
-possono usare [`install-android-with-build-alsa-driver.sh`](install-android-with-build-alsa-driver.sh), che compila tutto da sorgente
-contro Android SDK + NDK installati localmente.
+L'APK finale, incluso il binario `tinymix` per tutte e quattro le ABI, viene pubblicato nelle [Releases di GitHub](../../releases) ad ogni release. Lo script di build ricompila `tinymix` da sorgente per le 4 ABI supportate (arm64-v8a, armeabi-v7a, x86_64, x86), li inserisce come asset dentro l'APK, builda l'APK e lo installa — senza fare affidamento su binari prebuilt committati.
 
 I dettagli delle licenze dei componenti di terze parti inclusi (BSD-3-Clause per `tinymix` / `libtinyalsa`, Apache-2.0 per AndroidX e Google Material) sono in [`THIRD-PARTY-NOTICES.md`](THIRD-PARTY-NOTICES.md).
 
