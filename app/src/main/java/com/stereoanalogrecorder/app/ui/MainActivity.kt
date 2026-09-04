@@ -62,6 +62,18 @@ class MainActivity : AppCompatActivity() {
     private val mainHandler = Handler(Looper.getMainLooper())
     private var deviceCallback: AudioDeviceCallback? = null
     private var monitorUiBound = false
+    /** True while bindState() is programmatically updating the Live-listen
+     *  volume slider, so its `addOnChangeListener` can short-circuit and
+     *  avoid echoing the stored value back into [MicStateStore] (which
+     *  would cause an unnecessary dispatch + AudioTrack.setVolume call).
+     *  Mirrors the `monitorUiBound` guard pattern used by the Live-listen
+     *  switch directly above. */
+    private var monitorVolumeUiBound = false
+    /** True while bindState() is programmatically updating the Live-listen
+     *  max-dB slider, so its `addOnChangeListener` can short-circuit and
+     *  avoid echoing the stored value back into [MicStateStore]. Mirrors
+     *  the [monitorVolumeUiBound] guard pattern. */
+    private var monitorMaxDbUiBound = false
     /** True while bindState() is programmatically updating the UI, so toggle
      *  listeners can short-circuit and avoid overwriting store/SharedPreferences
      *  with the *effective* mode (which differs from the stored mode when root
@@ -600,6 +612,37 @@ class MainActivity : AppCompatActivity() {
                 MonitorService.stop(this)
             }
         }
+
+        // Live-listen volume slider. Per-instance gain via AudioTrack.setVolume
+        // — does NOT touch the system media volume, so music / call audio on
+        // the phone is left intact while the user raises or lowers the
+        // headphone listening level of the mics. Mirrored back to the value
+        // label so the user sees the percent they're holding. The `fromUser`
+        // short-circuit (with the `monitorVolumeUiBound` re-entrancy guard
+        // above) prevents bindState() from echoing the stored value back
+        // into the store.
+        binding.monitorVolumeSlider.addOnChangeListener { _, value, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            if (!monitorVolumeUiBound) return@addOnChangeListener
+            val percent = value.toInt()
+            if (stateStore.snapshot().monitorVolume == percent) return@addOnChangeListener
+            stateStore.setMonitorVolume(percent)
+            binding.monitorVolumeValue.text = getString(R.string.monitor_volume_format, percent)
+        }
+
+        // Max-dB range for the Live-listen volume slider. With the volume
+        // slider at 0 %, no gain is applied regardless of this value. At the
+        // ±100 % extremes, the linear gain is `10^(±maxDb/20)`. Default 20
+        // dB on first launch; both values are persisted in SharedPreferences
+        // and restored on relaunch.
+        binding.monitorMaxDbSlider.addOnChangeListener { _, value, fromUser ->
+            if (!fromUser) return@addOnChangeListener
+            if (!monitorMaxDbUiBound) return@addOnChangeListener
+            val db = value.toInt()
+            if (stateStore.snapshot().listenMaxDb == db) return@addOnChangeListener
+            stateStore.setListenMaxDb(db)
+            binding.monitorMaxDbValue.text = getString(R.string.monitor_max_db_format, db)
+        }
     }
 
     // ---- Headphone detection ------------------------------------------------------
@@ -931,6 +974,39 @@ class MainActivity : AppCompatActivity() {
         // Hint reflects headphone availability.
         binding.monitorHint.text = if (state.headphonesConnected)
             getString(R.string.monitor_hint) else getString(R.string.monitor_no_headphones)
+
+        // Live-listen volume slider is shown only while monitoring is on AND
+        // headphones are connected. The slider value mirrors the store; the
+        // re-entrancy guard around the listener prevents this programmatic
+        // assignment from echoing back into the store (and therefore into
+        // another AudioTrack.setVolume() call on the next observer tick).
+        val showVolume = state.headphonesConnected && state.isMonitoring
+        monitorVolumeUiBound = false
+        binding.monitorVolumeRow.visibility = if (showVolume) View.VISIBLE else View.GONE
+        binding.monitorVolumeSlider.visibility = if (showVolume) View.VISIBLE else View.GONE
+        binding.monitorMaxDbRow.visibility = if (showVolume) View.VISIBLE else View.GONE
+        binding.monitorMaxDbSlider.visibility = if (showVolume) View.VISIBLE else View.GONE
+        if (showVolume) {
+            val sliderValue = state.monitorVolume.toFloat()
+            if (binding.monitorVolumeSlider.value.toInt() != state.monitorVolume) {
+                binding.monitorVolumeSlider.value = sliderValue
+            }
+            binding.monitorVolumeValue.text =
+                getString(R.string.monitor_volume_format, state.monitorVolume)
+        }
+        monitorVolumeUiBound = true
+
+        // The max-dB range is always set (even when the slider row is hidden)
+        // so the persisted value can still drive the gain split when the user
+        // turns Live listen back on. The label only shows while the panel is
+        // visible, to keep the idle layout clean.
+        monitorMaxDbUiBound = false
+        if (binding.monitorMaxDbSlider.value.toInt() != state.listenMaxDb) {
+            binding.monitorMaxDbSlider.value = state.listenMaxDb.toFloat()
+        }
+        binding.monitorMaxDbValue.text =
+            getString(R.string.monitor_max_db_format, state.listenMaxDb)
+        monitorMaxDbUiBound = true
     }
 
     private fun updateMeters(state: MicStateStore.State) {

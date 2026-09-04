@@ -101,6 +101,20 @@
     <string name="status_monitor_on">Live listen on</string>
     <string name="status_monitor_off">Live listen off</string>
 
+    <!-- Live-listen volume (per-instance AudioTrack gain, does NOT touch the
+         system media volume). Shown only while the Live listen switch is on
+         AND headphones are connected. Signed scale: -100 % = full attenuation
+         (mute), 0 % = unity, +100 % = max boost the current dB range allows. -->
+    <string name="monitor_volume_label">Listen volume</string>
+    <string name="monitor_volume_format">%1$+d%%</string>
+    <string name="monitor_volume_hint">Adjusts the headphone listening volume only — leaves media / call volume untouched. 0 %% = unity.</string>
+
+    <!-- Max attenuation/boost in dB applied by the listen volume slider at
+         its extremes. 0 locks the volume slider to 0 %; 75 gives it the
+         widest possible ±75 dB reach. -->
+    <string name="monitor_max_db_label">Max range</string>
+    <string name="monitor_max_db_format">±%1$d dB</string>
+
     <!-- Bitrate hint (shown when M4A/AAC format is selected) -->
     <string name="bitrate_hint">The maximum bitrate depends on your device. The highest value supported by your phone is always selectable.</string>
 

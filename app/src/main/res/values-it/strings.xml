@@ -109,6 +109,21 @@
     <string name="status_monitor_on">Ascolto diretto attivo</string>
     <string name="status_monitor_off">Ascolto diretto disattivato</string>
 
+    <!-- Volume di ascolto (gain per-instance dell'AudioTrack di Live listen,
+         NON tocca il volume media di sistema). Mostrato solo quando la spunta
+         "Ascolto diretto" è accesa E le cuffie sono collegate. Scala con segno:
+         -100 %% = piena attenuazione (muto), 0 %% = unity, +100 %% = massimo
+         boost consentito dall'escursione in dB corrente. -->
+    <string name="monitor_volume_label">Volume di ascolto</string>
+    <string name="monitor_volume_format">%1$+d%%</string>
+    <string name="monitor_volume_hint">Regola solo il volume di ascolto in cuffia — lascia intatto il volume di media / chiamate. 0 %% = unity.</string>
+
+    <!-- Massima attenuazione/boost in dB che lo slider del volume può
+         raggiungere ai suoi estremi. 0 blocca lo slider del volume a 0 %%;
+         75 gli dà l'escursione massima possibile di ±75 dB. -->
+    <string name="monitor_max_db_label">Escursione massima</string>
+    <string name="monitor_max_db_format">±%1$d dB</string>
+
     <!-- Bitrate hint (shown when M4A/AAC format is selected) -->
     <string name="bitrate_hint">Il bitrate massimo dipende dal tuo telefono. Il valore più alto supportato dal dispositivo è sempre selezionabile.</string>
 

@@ -117,10 +117,68 @@ class PreferencesRepository(context: Context) {
         get() = prefs.getBoolean(KEY_SHOW_CLASSIC_NOTIFICATION, true)
         set(value) = prefs.edit().putBoolean(KEY_SHOW_CLASSIC_NOTIFICATION, value).apply()
 
+    /**
+     * Per-instance listening volume for the "Live listen" AudioTrack.
+     *
+     * Symmetric scale: -100 % (full attenuation / mute) .. +100 % (full boost),
+     * with 0 % = unity (no change vs. the raw mic signal). The actual gain
+     * applied to the monitor tap is
+     * `10^((volume/100) * (maxDb/20))`, where [listenMaxDb] sets the upper
+     * dB boundary that the slider reaches at ±100 %. The fraction that fits
+     * inside `AudioTrack.setVolume()`'s range is applied there (per-instance
+     * + channel-symmetric, no system stream touched); any remaining boost
+     * above the platform's [android.media.AudioTrack.getMaxVolume] (often
+     * exactly 1.0, which is what makes per-track boost impossible via
+     * setVolume alone) is applied as a per-sample buffer multiplication
+     * in the monitor tap with clamping.
+     *
+     * Persisted so the user's chosen headphone volume survives process
+     * restarts and stays in effect across Live listen off/on cycles.
+     */
+    var monitorVolumePercent: Int
+        get() = prefs.getInt(KEY_MONITOR_VOLUME, DEFAULT_MONITOR_VOLUME)
+            .coerceIn(MIN_MONITOR_VOLUME, MAX_MONITOR_VOLUME)
+        set(value) {
+            prefs.edit()
+                .putInt(KEY_MONITOR_VOLUME, value.coerceIn(MIN_MONITOR_VOLUME, MAX_MONITOR_VOLUME))
+                .apply()
+        }
+
+    /**
+     * Maximum attenuation/boost (in dB, single symmetric value, range 0..75)
+     * that the "Listen volume" slider can apply. With the slider at -100 %
+     * the gain is `10^(-maxDb/20)` (mute when maxDb > 0); at 0 % it's 1.0;
+     * at +100 % it's `10^(+maxDb/20)`. Default 20 dB so the slider covers
+     * ±20 dB on first launch — matching the existing "Gain scale" default
+     * for the per-mic sliders.
+     */
+    var listenMaxDb: Int
+        get() = prefs.getInt(KEY_LISTEN_MAX_DB, DEFAULT_LISTEN_MAX_DB)
+            .coerceIn(MIN_LISTEN_MAX_DB, MAX_LISTEN_MAX_DB)
+        set(value) {
+            prefs.edit()
+                .putInt(KEY_LISTEN_MAX_DB, value.coerceIn(MIN_LISTEN_MAX_DB, MAX_LISTEN_MAX_DB))
+                .apply()
+        }
+
     companion object {
         const val MIN_MAX_GAIN_SCALE = 12
         const val DEFAULT_MAX_GAIN_SCALE = 20
         const val MAX_MAX_GAIN_SCALE = 75
+
+        /** Lower bound of the "Live listen" volume slider (percent). -100 = mute. */
+        const val MIN_MONITOR_VOLUME = -100
+        /** Upper bound of the "Live listen" volume slider (percent). +100 = max boost. */
+        const val MAX_MONITOR_VOLUME = 100
+        /** Default unity gain for the "Live listen" AudioTrack. */
+        const val DEFAULT_MONITOR_VOLUME = 0
+
+        /** Lower bound of the "Live listen" max-dB slider (dB). 0 = volume slider locked at 0 %. */
+        const val MIN_LISTEN_MAX_DB = 0
+        /** Upper bound of the "Live listen" max-dB slider (dB). */
+        const val MAX_LISTEN_MAX_DB = 75
+        /** Default max-dB range (matches the per-mic gain scale default). */
+        const val DEFAULT_LISTEN_MAX_DB = 20
 
         /**
          * Bitrate options shown in the UI spinner, resolved dynamically from the
@@ -159,6 +217,8 @@ class PreferencesRepository(context: Context) {
         private const val KEY_AAC_BITRATE = "aac_bitrate"
         private const val KEY_SAMPLE_RATE_HZ = "sample_rate_hz"
         private const val KEY_SHOW_CLASSIC_NOTIFICATION = "show_classic_notification"
+        private const val KEY_MONITOR_VOLUME = "listen_volume"
+        private const val KEY_LISTEN_MAX_DB = "listen_max_db"
     }
 }
 

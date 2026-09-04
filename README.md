@@ -1,8 +1,8 @@
 # Stereo Analog Recorder
 
-**Stereo Analog Recorder** is an Android app that lets you measure and control the microphone input gain in real time, so loud sources never clip at 0 dB and your recordings stay clean.
+**Stereo Analog Recorder** is an Android app that lets you **measure and control the microphone input gain** in real time, **record** it to a file, and **adjust the headphone listening volume** of the mics while "Live listen" is on — all so loud sources never clip at 0 dB and your recordings stay clean.
 
-The main goal is simple: give you precise control over microphone sensitivity — both **boost** (when the source is too quiet) and, more importantly, **attenuation** (when the source is loud and would otherwise distort).
+The main goal is simple: give you precise control over microphone sensitivity — both **boost** (when the source is too quiet) and, more importantly, **attenuation** (when the source is loud and would otherwise distort). As a bonus, the same gain setting also keeps your recordings clean when you open the camera, record a voice memo or do a WhatsApp / Telegram call, because the gain is applied at the codec (root) or DSP layer **before** the samples leave the app process — and is left in place by the always-on capture that survives the user switching apps.
 
 ## Installation scripts
 
@@ -52,6 +52,8 @@ License details for the bundled third-party components (BSD-3-Clause for `tinymi
 
 ### Live headphone monitoring
 - A "Live listen" toggle that lets you hear the microphones through connected wired or Bluetooth headphones, even when you are not recording. Useful for checking what the mics are picking up in real time.
+- A **Listen volume** slider (-100 % … +100 %, 0 % = unity) appears the moment "Live listen" is on and headphones are connected. Negative values attenuate the listening volume while positive values amplify it. A second **Max range** slider underneath (0 – 75 dB, default ±20 dB) sets the dB reach at the volume slider's extremes: the linear gain applied to the monitor tap is `10^((volumePercent / 100) × (maxDb / 20))`. Both values are persisted in `SharedPreferences` and restored on relaunch.
+- The gain is delivered in two stages: the part that fits inside `AudioTrack.setVolume()` (per-instance, channel-symmetric, **does not touch the system media / ring / call / alarm volume**, and does not touch the recording going to disk) is fed to `setVolume`; the leftover boost is applied as a per-sample buffer multiplication inside the monitor tap with rounding + 16-bit clamping. This two-stage split is what makes boost above unity actually audible on devices whose `AudioTrack.getMaxVolume()` is capped at 1.0 (every modern Android) — `setVolume` alone would clip silently at unity on those devices.
 
 ### Recording
 - One-tap **Record** / **Stop** buttons (the classic red circle and white square).
@@ -69,6 +71,9 @@ License details for the bundled third-party components (BSD-3-Clause for `tinymi
 - **Control type**: choose between real analog **Gain** (root only, the only path that truly prevents clipping) and **Level** (digital volume scaling that works on every device).
 - **Notification style**: classic controls (−/+ per mic, rec/stop) or a minimal "recording in background" notification.
 
+### Gain stays in effect across apps (root path)
+When **Control type = "Gain (root only)"** is selected and root is available, the requested dB is split into an analog portion applied *before* the ADC (ALSA, via the bundled `tinymix` helper) and a residual digital portion applied to the PCM. The codec value is latched at the hardware level and the residual is applied by the always-on foreground capture. **As long as the app is left running in the background**, both numbers remain at whatever level you dialed them to — opening another app that records from the microphone (the stock camera with audio on, a voice memo, WhatsApp or Telegram audio messages, WhatsApp or Telegram voice / video calls, …) will keep capturing at your gain: a quiet source you lifted with **+12 dB** stays lifted, a loud concert source you cut with **−18 dB** stays cut. The classic-controls foreground notification keeps working too, so you can fine-tune both mic gains up or down from the shade without leaving the other app. Stop the foreground service from the notification (or close Stereo Analog Recorder from the app) and the codec is restored to its boot default — your other apps go back to their normal mic level.
+
 ### Warning
 - The app reminds you that large positive gains can damage your hearing and distort the recording. With loud sources, the recommended approach is **negative gain** to stay below 0 dB.
 
@@ -83,6 +88,8 @@ License details for the bundled third-party components (BSD-3-Clause for `tinymi
 | Digital stage | The residual dB is multiplied into the PCM samples and clamped. |
 | Meters / peak | Each buffer's level is converted to dB and pushed to the meters and the peak memory. |
 | Recording | The processed PCM is encoded to the chosen format and written to disk. |
+| Live listen | A second consumer (`AudioTrack`) taps the same processed PCM in parallel and plays it through the connected headphones. The headphone level is split into an `AudioTrack.setVolume()` portion (per-instance, both channels together, no system stream volume touched) plus a per-sample buffer multiplier for any boost that exceeds the platform's `AudioTrack.getMaxVolume()`. |
+| Always-on capture | While the foreground service is running (i.e. you haven't killed it from the notification, exited the app, or stopped the service), the AudioRecord and the ALSA codec state stay alive in the background — so any other app that opens the microphone inherits the gain you've dialed in. |
 
 ---
 
@@ -91,6 +98,7 @@ License details for the bundled third-party components (BSD-3-Clause for `tinymi
 - **Android 8.0 (API 26)** or later.
 - Works on any phone with two microphones, no root required for the digital path.
 - **Root (Magisk recommended)** is required for the analog pre-ADC attenuation that prevents clipping at the source.
+- "Live listen" requires a wired headset, wired headphones, USB headset, or Bluetooth A2DP output. The listen-volume slider can boost up to the chosen **Max range** (0 – 75 dB) on every device — the per-sample buffer multiplier in the monitor tap takes over for any gain that `AudioTrack.setVolume()` can't express (typically above 1.0), so positive volume values are always audible regardless of the platform's `getMaxVolume()` cap. The AudioManager stream volume is never modified.
 
 ---
 

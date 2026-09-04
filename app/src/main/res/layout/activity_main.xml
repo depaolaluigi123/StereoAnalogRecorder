@@ -670,6 +670,112 @@
                     android:layout_height="wrap_content" />
             </LinearLayout>
 
+            <!-- Live-listen volume: visible only while monitoring is active AND
+                 headphones are connected. A single slider that adjusts BOTH
+                 channels by the same value (AudioTrack.setVolume is per-instance
+                 and channel-symmetric, so this never touches the system media
+                 volume — only the Live-listen playback). -->
+            <LinearLayout
+                android:id="@+id/monitorVolumeRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/monitor_volume_label"
+                    android:textColor="?attr/textPrimary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/monitorVolumeValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-black"
+                    android:text="0%"
+                    android:textColor="?attr/gainActiveColor"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <!-- Signed scale (-100..+100; 0 = unity). Negative = attenuation,
+                 positive = boost. Boost above the platform's
+                 AudioTrack.getMaxVolume() is delivered as a per-sample buffer
+                 multiplication in the monitor tap (so the user can actually
+                 hear amplification on devices where setVolume alone is capped
+                 at unity). -->
+            <com.google.android.material.slider.Slider
+                android:id="@+id/monitorVolumeSlider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:stepSize="1"
+                android:value="0"
+                android:valueFrom="-100"
+                android:valueTo="100"
+                android:visibility="gone"
+                app:haloColor="?attr/gainGlowColor"
+                app:labelBehavior="floating"
+                app:thumbColor="?attr/gainActiveColor"
+                app:tickVisible="false"
+                app:trackColorActive="?attr/gainActiveColor"
+                app:trackColorInactive="?attr/gainTrackColor" />
+
+            <!-- Max attenuation/boost in dB that the volume slider above can
+                 reach at its extremes. 0 locks the volume slider at 0 %; 75
+                 gives it the widest possible ±75 dB reach. Default 20 dB so
+                 the slider covers the same ±20 dB range as the per-mic gain
+                 scale on first launch. -->
+            <LinearLayout
+                android:id="@+id/monitorMaxDbRow"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:visibility="gone">
+
+                <TextView
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="sans-serif-medium"
+                    android:text="@string/monitor_max_db_label"
+                    android:textColor="?attr/textPrimary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/monitorMaxDbValue"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="sans-serif-black"
+                    android:text="±20 dB"
+                    android:textColor="?attr/gainActiveColor"
+                    android:textSize="14sp" />
+            </LinearLayout>
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/monitorMaxDbSlider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="2dp"
+                android:stepSize="1"
+                android:value="20"
+                android:valueFrom="0"
+                android:valueTo="75"
+                android:visibility="gone"
+                app:haloColor="?attr/gainGlowColor"
+                app:labelBehavior="floating"
+                app:thumbColor="?attr/gainActiveColor"
+                app:tickVisible="false"
+                app:trackColorActive="?attr/gainActiveColor"
+                app:trackColorInactive="?attr/gainTrackColor" />
+
             <TextView
                 android:id="@+id/monitorHint"
                 android:layout_width="match_parent"

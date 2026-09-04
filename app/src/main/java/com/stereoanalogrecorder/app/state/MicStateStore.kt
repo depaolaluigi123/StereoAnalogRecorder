@@ -48,7 +48,29 @@ class MicStateStore(
         val peakDb2: Float,
         /** True if a wired or Bluetooth audio output device suitable for live-listen is connected. */
         val headphonesConnected: Boolean,
-        val gainControlMode: GainControlMode
+        val gainControlMode: GainControlMode,
+        /**
+         * Per-instance listening volume for the Live listen AudioTrack,
+         * -100..+100 percent (0 = unity). Applied to the AudioTrack via
+         * [android.media.AudioTrack.setVolume] in
+         * [com.stereoanalogrecorder.app.service.MonitorService] — does NOT
+         * touch any system stream volume (media / ring / alarm / etc.), only
+         * the monitor track itself, so the user's music / call volume is left
+         * intact. Boost above the platform's [android.media.AudioTrack.getMaxVolume]
+         * (often exactly 1.0) is applied as a per-sample buffer multiplication
+         * in the monitor tap, so the user can actually hear amplification
+         * beyond unity on devices where setVolume alone can't.
+         */
+        val monitorVolume: Int,
+        /**
+         * Maximum attenuation/boost (in dB, symmetric) that the [monitorVolume]
+         * slider can apply. Range 0..75, default 20. The linear gain factor
+         * applied to the monitor tap is
+         * `10^((monitorVolume / 100) * (listenMaxDb / 20))` — i.e. the
+         * volume slider linearly maps -100..+100 to -maxDb..+maxDb on a
+         * logarithmic (dB) scale.
+         */
+        val listenMaxDb: Int
     )
 
     fun interface Observer {
@@ -117,6 +139,37 @@ class MicStateStore(
     fun setRecordFormat(format: RecordFormat) = update { copy(recordFormat = format) }
     fun setAacBitrateKbps(kbps: Int) = update {
         copy(aacBitrateKbps = if (kbps in PreferencesRepository.ALLOWED_BITRATES) kbps else aacBitrateKbps)
+    }
+
+    /**
+     * Update the per-instance Live listen volume (percent, -100..+100; 0 = unity).
+     * Coerced to the slider bounds defined by [PreferencesRepository.MIN_MONITOR_VOLUME]
+     * / [PreferencesRepository.MAX_MONITOR_VOLUME]. No-op when the value is
+     * already at the target so we don't trigger spurious state dispatches (and
+     * therefore unnecessary AudioTrack.setVolume() calls) on every onChange
+     * tick when the slider sits on the same step.
+     */
+    fun setMonitorVolume(percent: Int) = update {
+        val clamped = percent.coerceIn(
+            PreferencesRepository.MIN_MONITOR_VOLUME,
+            PreferencesRepository.MAX_MONITOR_VOLUME
+        )
+        if (monitorVolume == clamped) this else copy(monitorVolume = clamped)
+    }
+
+    /**
+     * Update the max attenuation/boost range (dB, 0..75) of the Live listen
+     * volume slider. 0 locks the volume slider to 0 % (unity, no effect); 75
+     * gives it the widest possible ±75 dB reach. Coerced to the slider bounds
+     * defined by [PreferencesRepository.MIN_LISTEN_MAX_DB] /
+     * [PreferencesRepository.MAX_LISTEN_MAX_DB]; no-op when unchanged.
+     */
+    fun setListenMaxDb(db: Int) = update {
+        val clamped = db.coerceIn(
+            PreferencesRepository.MIN_LISTEN_MAX_DB,
+            PreferencesRepository.MAX_LISTEN_MAX_DB
+        )
+        if (listenMaxDb == clamped) this else copy(listenMaxDb = clamped)
     }
 
     /**
@@ -256,6 +309,8 @@ class MicStateStore(
         preferences.aacBitrateKbps = next.aacBitrateKbps
         preferences.sampleRateHz = next.sampleRateHz
         preferences.gainControlMode = next.gainControlMode
+        preferences.monitorVolumePercent = next.monitorVolume
+        preferences.listenMaxDb = next.listenMaxDb
     }
 
     private fun dispatch(next: State) {
@@ -283,6 +338,8 @@ class MicStateStore(
         peakDb1 = Float.NEGATIVE_INFINITY,
         peakDb2 = Float.NEGATIVE_INFINITY,
         headphonesConnected = false,
-        gainControlMode = preferences.gainControlMode
+        gainControlMode = preferences.gainControlMode,
+        monitorVolume = preferences.monitorVolumePercent,
+        listenMaxDb = preferences.listenMaxDb
     )
 }
